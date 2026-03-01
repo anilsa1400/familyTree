@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -20,7 +19,19 @@ import { MemberDetailsCard } from "./src/components/members/MemberDetailsCard";
 import { ColorPickerField } from "./src/components/settings/ColorPickerField";
 import { SectionRefreshButton, SectionViewModeToggle, SettingsToggle } from "./src/components/common/SectionControls";
 import { FamilyFilterSelector } from "./src/components/common/FamilyFilterSelector";
+import { PanelHeader } from "./src/components/common/PanelHeader";
+import { OptionChip, OptionChips } from "./src/components/common/OptionChips";
+import { TreePersonCard } from "./src/components/tree/TreePersonCard";
 import { uiCommonStyles } from "./src/styles/uiStyles";
+import {
+  buildFamilyNameMap,
+  clamp,
+  displayName,
+  familyNameFromLastName,
+  formatDate,
+  groupMembersByFamilyName,
+  toNullable,
+} from "./src/lib/familyUtils";
 import {
   Family,
   FamilyGraph,
@@ -57,6 +68,14 @@ const tabIconByKey: Record<TabKey, "git-branch-outline" | "people-outline" | "sw
 
 const genderOptions: (Gender | "")[] = ["", "MALE", "FEMALE", "NON_BINARY", "OTHER"];
 const parentTypeOptions: ParentType[] = ["BIOLOGICAL", "ADOPTIVE", "STEP", "GUARDIAN"];
+const genderChipOptions: OptionChip<Gender | "">[] = genderOptions.map((option) => ({
+  value: option,
+  label: option || "Unspecified",
+}));
+const parentTypeChipOptions: OptionChip<ParentType>[] = parentTypeOptions.map((option) => ({
+  value: option,
+  label: option,
+}));
 
 type ThemePreset = {
   id: ThemePresetId;
@@ -156,186 +175,6 @@ const pageKeyBySlug: Record<string, AppPage> = {
   home: "HOME",
   settings: "SETTINGS",
 };
-
-const displayName = (person: Person) => `${person.firstName} ${person.lastName}`.trim();
-
-type FamilyGroup = {
-  key: string;
-  familyName: string;
-  members: Person[];
-};
-
-const familyNameFromLastName = (lastName: string | null | undefined) => {
-  const trimmed = (lastName ?? "").trim();
-  return trimmed.length > 0 ? trimmed : "Unknown";
-};
-
-const buildFamilyNameMap = (graph: FamilyGraph): Map<string, string> => {
-  const personById = new Map<string, Person>();
-  graph.persons.forEach((person) => {
-    personById.set(person.id, person);
-  });
-
-  const parentIdsByChild = new Map<string, string[]>();
-  graph.parentChildRelations.forEach((relation) => {
-    const parentIds = parentIdsByChild.get(relation.childId) ?? [];
-    parentIds.push(relation.parentId);
-    parentIdsByChild.set(relation.childId, parentIds);
-  });
-
-  const spouseRelationsByPerson = new Map<string, SpouseRelation[]>();
-  graph.spouseRelations.forEach((relation) => {
-    const listA = spouseRelationsByPerson.get(relation.personAId) ?? [];
-    listA.push(relation);
-    spouseRelationsByPerson.set(relation.personAId, listA);
-
-    const listB = spouseRelationsByPerson.get(relation.personBId) ?? [];
-    listB.push(relation);
-    spouseRelationsByPerson.set(relation.personBId, listB);
-  });
-
-  const birthFamilyMemo = new Map<string, string>();
-  const resolvingBirth = new Set<string>();
-
-  const resolveBirthFamily = (personId: string): string => {
-    if (birthFamilyMemo.has(personId)) {
-      return birthFamilyMemo.get(personId) ?? "Unknown";
-    }
-
-    const self = personById.get(personId);
-    if (!self) {
-      return "Unknown";
-    }
-
-    if (resolvingBirth.has(personId)) {
-      return familyNameFromLastName(self.lastName);
-    }
-
-    resolvingBirth.add(personId);
-
-    const parentIds = parentIdsByChild.get(personId) ?? [];
-    let familyName = familyNameFromLastName(self.lastName);
-
-    if (parentIds.length > 0) {
-      const fatherId = parentIds.find((parentId) => personById.get(parentId)?.gender === "MALE");
-      const motherId = parentIds.find((parentId) => personById.get(parentId)?.gender === "FEMALE");
-      const lineageParentId = fatherId ?? motherId ?? parentIds[0];
-
-      if (lineageParentId) {
-        familyName = resolveBirthFamily(lineageParentId);
-      }
-    }
-
-    birthFamilyMemo.set(personId, familyName);
-    resolvingBirth.delete(personId);
-    return familyName;
-  };
-
-  const resolveHusbandIdForPerson = (personId: string): string | null => {
-    const relations = (spouseRelationsByPerson.get(personId) ?? []).filter((relation) => !relation.divorcedAt);
-    if (relations.length === 0) {
-      return null;
-    }
-
-    const normalized = [...relations].sort((left, right) => {
-      const leftDate = left.marriedAt ?? left.createdAt;
-      const rightDate = right.marriedAt ?? right.createdAt;
-      return rightDate.localeCompare(leftDate);
-    });
-
-    for (const relation of normalized) {
-      const spouseId = relation.personAId === personId ? relation.personBId : relation.personAId;
-      const spouse = personById.get(spouseId);
-      if (spouse?.gender === "MALE") {
-        return spouseId;
-      }
-    }
-
-    return null;
-  };
-
-  const finalFamilyMap = new Map<string, string>();
-
-  graph.persons.forEach((person) => {
-    let familyName = resolveBirthFamily(person.id);
-
-    if (person.gender === "FEMALE") {
-      const husbandId = resolveHusbandIdForPerson(person.id);
-      if (husbandId) {
-        familyName = resolveBirthFamily(husbandId);
-      }
-    }
-
-    finalFamilyMap.set(person.id, familyName);
-  });
-
-  return finalFamilyMap;
-};
-
-const groupMembersByFamilyName = (
-  persons: Person[],
-  familyNameByPersonId: Map<string, string>,
-): FamilyGroup[] => {
-  const groups = new Map<string, FamilyGroup>();
-
-  persons.forEach((person) => {
-    const familyName = familyNameByPersonId.get(person.id) ?? familyNameFromLastName(person.lastName);
-    const key = familyName.toLowerCase();
-    const current = groups.get(key);
-
-    if (current) {
-      current.members.push(person);
-      return;
-    }
-
-    groups.set(key, {
-      key,
-      familyName,
-      members: [person],
-    });
-  });
-
-  return Array.from(groups.values())
-    .map((group) => ({
-      ...group,
-      members: [...group.members].sort((a, b) => displayName(a).localeCompare(displayName(b))),
-    }))
-    .sort((a, b) => a.familyName.localeCompare(b.familyName));
-};
-
-const formatDate = (value: string | null) => {
-  if (!value) {
-    return "";
-  }
-
-  return value.slice(0, 10);
-};
-
-const memberLifeLabel = (person: Person) => {
-  const birthDate = formatDate(person.dateOfBirth);
-  const deathDate = formatDate(person.dateOfDeath);
-
-  if (birthDate && deathDate) {
-    return `${birthDate} - ${deathDate}`;
-  }
-
-  if (birthDate) {
-    return `Born ${birthDate}`;
-  }
-
-  if (deathDate) {
-    return `Died ${deathDate}`;
-  }
-
-  return "Dates not set";
-};
-
-const toNullable = (value: string) => {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 type PersonFormState = {
   firstName: string;
@@ -1220,61 +1059,50 @@ const SettingsPage = ({
     onThemeEditorModeChange("CUSTOMIZE");
     onSecondaryColorChange(value);
   };
+  const themeModeOptions: OptionChip<ThemeEditorMode>[] = [
+    { value: "PRESET", label: "Preset" },
+    { value: "CUSTOMIZE", label: "Customize" },
+  ];
+  const themePresetOptions: OptionChip<ThemePresetId>[] = themePresets.map((preset) => ({
+    value: preset.id,
+    label: preset.label,
+  }));
+  const layoutOptions: OptionChip<LayoutMode>[] = [
+    { value: "SIDEBAR", label: "Sidebar" },
+    { value: "TOOLBAR", label: "Toolbar" },
+  ];
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
-        <Text style={styles.panelTitle}>Settings</Text>
-        <Text style={styles.panelHint}>
-          Select a theme using preset mode or switch to customize mode for manual colors.
-        </Text>
+        <PanelHeader
+          title="Settings"
+          hint="Select a theme using preset mode or switch to customize mode for manual colors."
+        />
 
         <Text style={uiCommonStyles.label}>Theme Mode</Text>
-        <View style={uiCommonStyles.optionRowWrap}>
-          {(["PRESET", "CUSTOMIZE"] as ThemeEditorMode[]).map((mode) => {
-            const isSelected = themeEditorMode === mode;
-            const label = mode === "PRESET" ? "Preset" : "Customize";
-
-            return (
-              <Pressable
-                key={`theme-editor-mode-${mode}`}
-                style={[
-                  uiCommonStyles.optionButton,
-                  { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
-                  isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
-                ]}
-                onPress={() => onThemeEditorModeChange(mode)}
-              >
-                <Text style={[uiCommonStyles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && uiCommonStyles.optionButtonTextActive]}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <OptionChips
+          options={themeModeOptions}
+          selectedValue={themeEditorMode}
+          onSelect={onThemeEditorModeChange}
+          activeBackgroundColor={resolvedPrimaryColor}
+          activeBorderColor={resolvedPrimaryColor}
+          activeTextColor="#ffffff"
+          inactiveBackgroundColor={resolvedSecondaryColor}
+          inactiveBorderColor={resolvedPrimaryColor}
+          inactiveTextColor={resolvedPrimaryColor}
+        />
 
         {!isCustomizeMode ? (
           <>
             <Text style={uiCommonStyles.label}>Theme Preset</Text>
-            <View style={uiCommonStyles.optionRowWrap}>
-              {themePresets.map((preset) => {
-                const isSelected = selectedThemeId === preset.id;
-                return (
-                  <Pressable
-                    key={`settings-preset-${preset.id}`}
-                    style={[
-                      uiCommonStyles.optionButton,
-                      isSelected && { backgroundColor: resolvedPrimaryColor, borderColor: resolvedPrimaryColor },
-                    ]}
-                    onPress={() => onPresetSelect(preset.id)}
-                  >
-                    <Text style={[uiCommonStyles.optionButtonText, isSelected && uiCommonStyles.optionButtonTextActive]}>
-                      {preset.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <OptionChips
+              options={themePresetOptions}
+              selectedValue={selectedThemeId}
+              onSelect={onPresetSelect}
+              activeBackgroundColor={resolvedPrimaryColor}
+              activeBorderColor={resolvedPrimaryColor}
+            />
           </>
         ) : (
           <>
@@ -1324,28 +1152,16 @@ const SettingsPage = ({
         </View>
 
         <Text style={uiCommonStyles.subsectionTitle}>Navigation</Text>
-        <View style={uiCommonStyles.optionRowWrap}>
-          {(["SIDEBAR", "TOOLBAR"] as LayoutMode[]).map((mode) => {
-            const isSelected = layoutMode === mode;
-            const label = mode === "SIDEBAR" ? "Sidebar" : "Toolbar";
-
-            return (
-              <Pressable
-                key={`layout-mode-${mode}`}
-                style={[
-                  uiCommonStyles.optionButton,
-                  { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
-                  isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
-                ]}
-                onPress={() => onLayoutModeSelect(mode)}
-              >
-                <Text style={[uiCommonStyles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && uiCommonStyles.optionButtonTextActive]}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <OptionChips
+          options={layoutOptions}
+          selectedValue={layoutMode}
+          onSelect={onLayoutModeSelect}
+          activeBackgroundColor={resolvedPrimaryColor}
+          activeBorderColor={resolvedPrimaryColor}
+          inactiveBackgroundColor={resolvedSecondaryColor}
+          inactiveBorderColor={resolvedPrimaryColor}
+          inactiveTextColor={resolvedPrimaryColor}
+        />
 
         <Text style={uiCommonStyles.subsectionTitle}>Display Options</Text>
         <SettingsToggle
@@ -1453,27 +1269,23 @@ const FamiliesPanel = ({
 
   return (
     <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
-      <View style={styles.panelHeaderRow}>
-        <View style={styles.panelHeaderTextBlock}>
-          <Text style={styles.panelTitle}>Families</Text>
-          <Text style={styles.panelHint}>Add, edit, and remove family details.</Text>
-        </View>
-        <View style={styles.panelHeaderActions}>
-          <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
-        </View>
-      </View>
+      <PanelHeader
+        title="Families"
+        hint="Add, edit, and remove family details."
+        actions={<SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />}
+      />
 
       <Text style={uiCommonStyles.label}>Select Family</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={uiCommonStyles.selectorRow}>
         <Pressable
           style={[
-            styles.selectorPill,
+            uiCommonStyles.selectorPill,
             { borderColor: primaryColor, backgroundColor: "#ffffff" },
             !selectedFamilyId && { backgroundColor: primaryColor, borderColor: primaryColor },
           ]}
           onPress={() => selectFamily(null)}
         >
-          <Text style={[styles.selectorPillText, { color: primaryColor }, !selectedFamilyId && styles.selectorPillTextActive]}>
+          <Text style={[uiCommonStyles.selectorPillText, { color: primaryColor }, !selectedFamilyId && uiCommonStyles.selectorPillTextActive]}>
             New Family
           </Text>
         </Pressable>
@@ -1481,7 +1293,7 @@ const FamiliesPanel = ({
           <Pressable
             key={family.id}
             style={[
-              styles.selectorPill,
+              uiCommonStyles.selectorPill,
               { borderColor: primaryColor, backgroundColor: "#ffffff" },
               selectedFamilyId === family.id && { backgroundColor: primaryColor, borderColor: primaryColor },
             ]}
@@ -1489,9 +1301,9 @@ const FamiliesPanel = ({
           >
             <Text
               style={[
-                styles.selectorPillText,
+                uiCommonStyles.selectorPillText,
                 { color: primaryColor },
-                selectedFamilyId === family.id && styles.selectorPillTextActive,
+                selectedFamilyId === family.id && uiCommonStyles.selectorPillTextActive,
               ]}
             >
               {family.name}
@@ -1685,16 +1497,16 @@ const MembersPanel = ({
 
   return (
     <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
-      <View style={styles.panelHeaderRow}>
-        <View style={styles.panelHeaderTextBlock}>
-          <Text style={styles.panelTitle}>Members</Text>
-          <Text style={styles.panelHint}>Create, edit, and delete family members grouped by family name.</Text>
-        </View>
-        <View style={styles.panelHeaderActions}>
-          <SectionViewModeToggle primaryColor={primaryColor} viewMode={viewMode} onToggle={onToggleViewMode} />
-          <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
-        </View>
-      </View>
+      <PanelHeader
+        title="Members"
+        hint="Create, edit, and delete family members grouped by family name."
+        actions={
+          <>
+            <SectionViewModeToggle primaryColor={primaryColor} viewMode={viewMode} onToggle={onToggleViewMode} />
+            <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
+          </>
+        }
+      />
       <FamilyFilterSelector
         familyNames={familyNames}
         selectedFamilyName={selectedFamilyName}
@@ -1709,23 +1521,23 @@ const MembersPanel = ({
       ) : null}
 
       <Text style={uiCommonStyles.label}>Select Existing Member</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={uiCommonStyles.selectorRow}>
         <Pressable
           style={[
-            styles.selectorPill,
+            uiCommonStyles.selectorPill,
             { borderColor: primaryColor },
             !selectedPersonId && { backgroundColor: primaryColor, borderColor: primaryColor },
           ]}
           onPress={() => selectPerson(null)}
         >
-          <Text style={[styles.selectorPillText, { color: primaryColor }, !selectedPersonId && styles.selectorPillTextActive]}>
+          <Text style={[uiCommonStyles.selectorPillText, { color: primaryColor }, !selectedPersonId && uiCommonStyles.selectorPillTextActive]}>
             New Member
           </Text>
         </Pressable>
       </ScrollView>
 
       {viewMode === "LIST" ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={uiCommonStyles.selectorRow}>
           <View style={styles.horizontalSectionsRow}>
             {visibleGroupedFamilies.map((familyGroup) => (
               <View
@@ -1821,28 +1633,16 @@ const MembersPanel = ({
       />
 
       <Text style={uiCommonStyles.label}>Gender</Text>
-      <View style={uiCommonStyles.optionRowWrap}>
-        {genderOptions.map((option) => {
-          const isSelected = formState.gender === option;
-          const label = option || "Unspecified";
-
-          return (
-            <Pressable
-              key={label}
-              style={[
-                uiCommonStyles.optionButton,
-                { borderColor: primaryColor, backgroundColor: secondaryColor },
-                isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
-              ]}
-              onPress={() => setFormState((prev) => ({ ...prev, gender: option }))}
-            >
-              <Text style={[uiCommonStyles.optionButtonText, { color: primaryColor }, isSelected && uiCommonStyles.optionButtonTextActive]}>
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <OptionChips
+        options={genderChipOptions}
+        selectedValue={formState.gender}
+        onSelect={(value) => setFormState((prev) => ({ ...prev, gender: value }))}
+        activeBackgroundColor={primaryColor}
+        activeBorderColor={primaryColor}
+        inactiveBackgroundColor={secondaryColor}
+        inactiveBorderColor={primaryColor}
+        inactiveTextColor={primaryColor}
+      />
 
       <Text style={uiCommonStyles.label}>Date of Birth (YYYY-MM-DD)</Text>
       <TextInput
@@ -2048,16 +1848,16 @@ const RelationshipsPanel = ({
 
   return (
     <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
-      <View style={styles.panelHeaderRow}>
-        <View style={styles.panelHeaderTextBlock}>
-          <Text style={styles.panelTitle}>Relationships</Text>
-          <Text style={styles.panelHint}>Connect members as parent-child and spouses.</Text>
-        </View>
-        <View style={styles.panelHeaderActions}>
-          <SectionViewModeToggle primaryColor={primaryColor} viewMode={viewMode} onToggle={onToggleViewMode} />
-          <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
-        </View>
-      </View>
+      <PanelHeader
+        title="Relationships"
+        hint="Connect members as parent-child and spouses."
+        actions={
+          <>
+            <SectionViewModeToggle primaryColor={primaryColor} viewMode={viewMode} onToggle={onToggleViewMode} />
+            <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
+          </>
+        }
+      />
       <FamilyFilterSelector
         familyNames={familyNames}
         selectedFamilyName={selectedFamilyName}
@@ -2088,29 +1888,16 @@ const RelationshipsPanel = ({
       />
 
       <Text style={uiCommonStyles.label}>Relationship Type</Text>
-      <View style={uiCommonStyles.optionRowWrap}>
-        {parentTypeOptions.map((option) => (
-          <Pressable
-            key={option}
-            style={[
-              uiCommonStyles.optionButton,
-              { borderColor: primaryColor, backgroundColor: secondaryColor },
-              relationType === option && { backgroundColor: primaryColor, borderColor: primaryColor },
-            ]}
-            onPress={() => setRelationType(option)}
-          >
-            <Text
-              style={[
-                uiCommonStyles.optionButtonText,
-                { color: primaryColor },
-                relationType === option && uiCommonStyles.optionButtonTextActive,
-              ]}
-            >
-              {option}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <OptionChips
+        options={parentTypeChipOptions}
+        selectedValue={relationType}
+        onSelect={setRelationType}
+        activeBackgroundColor={primaryColor}
+        activeBorderColor={primaryColor}
+        inactiveBackgroundColor={secondaryColor}
+        inactiveBorderColor={primaryColor}
+        inactiveTextColor={primaryColor}
+      />
 
       <Pressable
         style={[uiCommonStyles.primaryButton, { backgroundColor: primaryColor }]}
@@ -2253,7 +2040,7 @@ const HorizontalPersonSelector = ({
   return (
     <View style={styles.groupedSelectorContainer}>
       {viewMode === "LIST" ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={uiCommonStyles.selectorRow}>
           <View style={styles.horizontalSectionsRow}>
             {groupedFamilies.map((familyGroup) => (
               <View
@@ -2287,12 +2074,12 @@ const HorizontalPersonSelector = ({
         groupedFamilies.map((familyGroup) => (
           <View key={`selector-family-${familyGroup.key}`} style={styles.groupedSelectorFamilyBlock}>
             <Text style={[styles.groupedSelectorFamilyLabel, { color: primaryColor }]}>{familyGroup.familyName} Family</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={uiCommonStyles.selectorRow}>
               {familyGroup.members.map((person) => (
                 <Pressable
                   key={person.id}
                   style={[
-                    styles.selectorPill,
+                    uiCommonStyles.selectorPill,
                     { borderColor: primaryColor },
                     selectedId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
                   ]}
@@ -2300,9 +2087,9 @@ const HorizontalPersonSelector = ({
                 >
                   <Text
                     style={[
-                      styles.selectorPillText,
+                      uiCommonStyles.selectorPillText,
                       { color: primaryColor },
-                      selectedId === person.id && styles.selectorPillTextActive,
+                      selectedId === person.id && uiCommonStyles.selectorPillTextActive,
                     ]}
                   >
                     {displayName(person)}
@@ -2356,149 +2143,6 @@ const orderNodeByName = (
   return displayName(first).localeCompare(displayName(second)) <= 0
     ? { personId: firstId, partnerId: secondId }
     : { personId: secondId, partnerId: firstId };
-};
-
-type MemberPhotoProps = {
-  person: Person;
-  primaryColor: string;
-  size?: number;
-  showPhoto?: boolean;
-};
-
-const initialsFromPerson = (person: Person) => {
-  const first = person.firstName.trim().charAt(0).toUpperCase();
-  const last = person.lastName.trim().charAt(0).toUpperCase();
-  const initials = `${first}${last}`.trim();
-  return initials || "M";
-};
-
-const MemberPhoto = ({ person, primaryColor, size = 44, showPhoto = true }: MemberPhotoProps) => {
-  const photoUrl = person.photoUrl?.trim();
-  const hasPhoto = Boolean(photoUrl) && showPhoto;
-
-  if (hasPhoto) {
-    return (
-      <Image
-        source={{ uri: photoUrl }}
-        style={[
-          styles.memberPhoto,
-          {
-            width: size,
-            height: size,
-            borderColor: primaryColor,
-            borderRadius: size / 2,
-          },
-        ]}
-      />
-    );
-  }
-
-  return (
-    <View
-      style={[
-        styles.memberPhotoFallback,
-        {
-          width: size,
-          height: size,
-          borderColor: primaryColor,
-          borderRadius: size / 2,
-        },
-      ]}
-    >
-      <Text style={[styles.memberPhotoInitials, { color: primaryColor, fontSize: Math.max(12, Math.floor(size * 0.35)) }]}>
-        {initialsFromPerson(person)}
-      </Text>
-    </View>
-  );
-};
-
-type TreePersonCardProps = {
-  person: Person;
-  primaryColor: string;
-  showMemberPhotos: boolean;
-  familyName: string;
-  viewMode: SectionViewMode;
-  cardWidth: number;
-  cardHeight: number;
-  spouseNames?: string[];
-};
-
-const TreePersonCard = ({
-  person,
-  primaryColor,
-  showMemberPhotos,
-  familyName,
-  viewMode,
-  cardWidth,
-  cardHeight,
-  spouseNames = [],
-}: TreePersonCardProps) => {
-  const avatarSize = viewMode === "TILE" ? 54 : 48;
-  const spouseSummary = spouseNames.slice(0, 2).join(", ");
-  const hasSpouseSummary = spouseSummary.trim().length > 0;
-  const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
-  const birthLabel = person.dateOfBirth ? formatDate(person.dateOfBirth) : "Not set";
-  const deathLabel = person.dateOfDeath ? formatDate(person.dateOfDeath) : "Alive";
-  const isDeceased = Boolean(person.dateOfDeath);
-  const notesPreview = person.notes?.trim() || "No notes provided.";
-
-  return (
-    <View
-      style={[
-        styles.treePersonTile,
-        viewMode === "TILE" && styles.treePersonTilePortrait,
-        { width: cardWidth, minHeight: cardHeight },
-        { borderColor: primaryColor, backgroundColor: "#ffffff" },
-        uiCommonStyles.shadowSoft,
-      ]}
-    >
-      <View style={styles.treePersonHeaderRow}>
-        <View style={[styles.treePersonAvatarWrap, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
-          <MemberPhoto person={person} primaryColor={primaryColor} size={avatarSize} showPhoto={showMemberPhotos} />
-        </View>
-        <View style={styles.treePersonDetailColumn}>
-          <Text style={styles.treeName} numberOfLines={2}>
-            {displayName(person)}
-          </Text>
-          <Text style={styles.treeMeta} numberOfLines={1}>
-            {familyName} Family
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.treeMetaBadgeRow}>
-        <View style={[styles.treeMetaBadge, { borderColor: primaryColor }]}>
-          <Text style={[styles.treeMetaBadgeText, { color: primaryColor }]}>{genderLabel}</Text>
-        </View>
-        {isDeceased ? (
-          <View style={styles.treeStatusBadge}>
-            <Text style={styles.treeStatusBadgeText}>RIP</Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.treeInfoPill}>
-        <Text style={styles.treeInfoPillText} numberOfLines={1}>
-          DOB: {birthLabel}
-        </Text>
-      </View>
-      <View style={styles.treeInfoPill}>
-        <Text style={styles.treeInfoPillText} numberOfLines={1}>
-          DOD: {deathLabel}
-        </Text>
-      </View>
-      {hasSpouseSummary ? (
-        <View style={styles.treeInfoPill}>
-          <Text style={styles.treeInfoPillText} numberOfLines={2}>
-            Partner: {spouseSummary}
-          </Text>
-        </View>
-      ) : null}
-      <Text style={styles.treeMemberNotes} numberOfLines={3}>
-        {notesPreview}
-      </Text>
-    </View>
-  );
 };
 
 const TreePanel = ({
@@ -2883,18 +2527,16 @@ const TreePanel = ({
 
   return (
     <View style={[uiCommonStyles.panel, styles.treePanelCanvas, uiCommonStyles.shadowSoft]}>
-      <View style={styles.panelHeaderRow}>
-        <View style={styles.panelHeaderTextBlock}>
-          <Text style={styles.panelTitle}>Family Tree</Text>
-          <Text style={styles.panelHint}>
-            Tap a branch card to expand/collapse descendants. Depth is limited to {MAX_GENERATION_DEPTH} generations.
-          </Text>
-        </View>
-        <View style={styles.panelHeaderActions}>
-          <SectionViewModeToggle primaryColor={primaryColor} viewMode={viewMode} onToggle={onToggleViewMode} />
-          <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
-        </View>
-      </View>
+      <PanelHeader
+        title="Family Tree"
+        hint={`Tap a branch card to expand/collapse descendants. Depth is limited to ${MAX_GENERATION_DEPTH} generations.`}
+        actions={
+          <>
+            <SectionViewModeToggle primaryColor={primaryColor} viewMode={viewMode} onToggle={onToggleViewMode} />
+            <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
+          </>
+        }
+      />
       <FamilyFilterSelector
         familyNames={familyNames}
         selectedFamilyName={selectedFamilyName}
@@ -3331,49 +2973,6 @@ const styles = StyleSheet.create({
   mainWorkspace: {
     flex: 1,
   },
-  customizeToolbar: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
-    backgroundColor: "#ffffff",
-  },
-  customizeToolbarTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  toolbarThemesRow: {
-    marginBottom: 8,
-  },
-  toolbarThemeChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginRight: 8,
-  },
-  toolbarThemeChipText: {
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  toolbarActionsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  toolbarActionButton: {
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  toolbarActionButtonText: {
-    color: "#ffffff",
-    fontWeight: "700",
-    fontSize: 12,
-  },
   title: {
     fontSize: 28,
     fontWeight: "700",
@@ -3401,15 +3000,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  tabButtonActive: {
-    backgroundColor: "#2e5f4f",
-  },
   tabText: {
     fontWeight: "600",
     color: "#26463b",
-  },
-  tabTextActive: {
-    color: "#ffffff",
   },
   content: {
     paddingBottom: 80,
@@ -3428,30 +3021,6 @@ const styles = StyleSheet.create({
   refreshIndicatorText: {
     fontSize: 12,
     fontWeight: "600",
-  },
-  panelTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#14332a",
-  },
-  panelHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  panelHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  panelHeaderTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  panelHint: {
-    marginTop: 4,
-    marginBottom: 12,
-    color: "#517467",
   },
   memberFamilyBadge: {
     alignSelf: "flex-start",
@@ -3474,9 +3043,6 @@ const styles = StyleSheet.create({
   familyInfoText: {
     fontSize: 12,
     fontWeight: "700",
-  },
-  selectorRow: {
-    marginBottom: 12,
   },
   familyGroupsContainer: {
     marginBottom: 10,
@@ -3533,29 +3099,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 2,
-  },
-  selectorPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#b8ccc2",
-    marginRight: 8,
-  },
-  selectorPillActive: {
-    backgroundColor: "#2e5f4f",
-    borderColor: "#2e5f4f",
-  },
-  selectorPillText: {
-    color: "#2e5f4f",
-    fontWeight: "600",
-  },
-  selectorPillTextActive: {
-    color: "#ffffff",
-  },
-  memberListColumn: {
-    gap: 6,
-    marginBottom: 8,
   },
   memberListRow: {
     borderWidth: 1,
@@ -3751,19 +3294,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
-  treeMiniButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: "#eaf3ee",
-    borderWidth: 1,
-    borderColor: "#c3d7cc",
-  },
-  treeMiniButtonText: {
-    color: "#2e5f4f",
-    fontWeight: "700",
-    fontSize: 12,
-  },
   treeNode: {
     marginBottom: 14,
     alignSelf: "flex-start",
@@ -3819,60 +3349,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
   },
-  treePersonTile: {
-    borderWidth: 1,
-    borderColor: "#d8e3df",
-    borderRadius: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 10,
-    backgroundColor: "#ffffff",
-    alignItems: "stretch",
-    justifyContent: "flex-start",
-    gap: 7,
-    flexShrink: 0,
-  },
-  treePersonTilePortrait: {
-    flex: 0,
-  },
-  treePersonAvatarWrap: {
-    borderWidth: 2,
-    borderRadius: 28,
-    padding: 1,
-    alignSelf: "flex-start",
-  },
-  treePersonHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  treePersonDetailColumn: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "flex-start",
-    gap: 2,
-  },
-  memberPhoto: {
-    borderWidth: 2,
-    backgroundColor: "#ffffff",
-  },
-  memberPhotoFallback: {
-    borderWidth: 2,
-    backgroundColor: "#eef5f2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  memberPhotoInitials: {
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  treeName: {
-    fontWeight: "800",
-    color: "#1b2e29",
-    fontSize: 14,
-    lineHeight: 18,
-    textAlign: "left",
-  },
   treeToggle: {
     fontSize: 11,
     fontWeight: "700",
@@ -3883,70 +3359,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     minWidth: 42,
     textAlign: "center",
-  },
-  treeMeta: {
-    color: "#2f4740",
-    fontSize: 12,
-    fontWeight: "700",
-    textAlign: "left",
-  },
-  treeMetaSecondary: {
-    color: "#415b53",
-    marginTop: 1,
-    fontSize: 11,
-    lineHeight: 13,
-    textAlign: "center",
-  },
-  treeInfoPill: {
-    width: "100%",
-    backgroundColor: "#eef4f1",
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 7,
-    borderWidth: 1,
-    borderColor: "#d7e3de",
-  },
-  treeInfoPillText: {
-    color: "#2f4740",
-    fontSize: 11,
-    fontWeight: "600",
-    textAlign: "left",
-    lineHeight: 14,
-  },
-  treeMetaBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  treeMetaBadge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    backgroundColor: "#ffffff",
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-  },
-  treeMetaBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
-  treeStatusBadge: {
-    backgroundColor: "#f45151",
-    borderRadius: 999,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  treeStatusBadgeText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  treeMemberNotes: {
-    marginTop: 1,
-    fontSize: 11,
-    lineHeight: 15,
-    color: "#49685d",
-    fontWeight: "500",
   },
   treeDepthLimitText: {
     marginTop: 8,

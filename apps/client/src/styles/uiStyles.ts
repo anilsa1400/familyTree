@@ -44,6 +44,30 @@ export const uiCommonStyles = StyleSheet.create({
     fontWeight: "600",
     color: uiTokens.colors.textPrimary,
   },
+  panelTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#14332a",
+  },
+  panelHint: {
+    marginTop: 4,
+    marginBottom: 12,
+    color: "#517467",
+  },
+  panelHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  panelHeaderTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  panelHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   input: {
     borderWidth: 1,
     borderColor: uiTokens.colors.borderSoft,
@@ -79,6 +103,25 @@ export const uiCommonStyles = StyleSheet.create({
     fontSize: 12,
   },
   optionButtonTextActive: {
+    color: "#ffffff",
+  },
+  selectorRow: {
+    marginBottom: 12,
+  },
+  selectorPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: uiTokens.radius.pill,
+    borderWidth: 1,
+    borderColor: "#b8ccc2",
+    marginRight: 8,
+    backgroundColor: uiTokens.colors.white,
+  },
+  selectorPillText: {
+    color: "#2e5f4f",
+    fontWeight: "600",
+  },
+  selectorPillTextActive: {
     color: "#ffffff",
   },
   actionRow: {

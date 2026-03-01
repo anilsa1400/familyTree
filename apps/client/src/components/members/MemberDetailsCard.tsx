@@ -1,6 +1,8 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Person } from "../../types/family";
 import { uiCommonStyles } from "../../styles/uiStyles";
+import { displayName, memberLifeLabel } from "../../lib/familyUtils";
+import { MemberAvatar } from "../common/MemberAvatar";
 
 type MemberDetailsCardProps = {
   person: Person;
@@ -11,42 +13,6 @@ type MemberDetailsCardProps = {
   isSelected: boolean;
   cardWidth: number | "100%";
   onPress: () => void;
-};
-
-const displayName = (person: Person) => `${person.firstName} ${person.lastName}`.trim();
-
-const memberInitials = (person: Person) => {
-  const first = person.firstName.trim().charAt(0).toUpperCase();
-  const last = person.lastName.trim().charAt(0).toUpperCase();
-  const initials = `${first}${last}`.trim();
-  return initials || "M";
-};
-
-const formatDate = (value: string | null) => {
-  if (!value) {
-    return "";
-  }
-
-  return value.slice(0, 10);
-};
-
-const memberLifeLabel = (person: Person) => {
-  const birthDate = formatDate(person.dateOfBirth);
-  const deathDate = formatDate(person.dateOfDeath);
-
-  if (birthDate && deathDate) {
-    return `${birthDate} - ${deathDate}`;
-  }
-
-  if (birthDate) {
-    return `Born ${birthDate}`;
-  }
-
-  if (deathDate) {
-    return `Died ${deathDate}`;
-  }
-
-  return "Dates not set";
 };
 
 export const MemberDetailsCard = ({
@@ -61,8 +27,6 @@ export const MemberDetailsCard = ({
 }: MemberDetailsCardProps) => {
   const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
   const notesPreview = person.notes?.trim() || "No notes provided.";
-  const imageUrl = person.photoUrl?.trim();
-  const hasPhoto = showMemberPhotos && Boolean(imageUrl);
 
   return (
     <Pressable
@@ -77,13 +41,7 @@ export const MemberDetailsCard = ({
       onPress={onPress}
     >
       <View style={styles.memberDetailHeaderRow}>
-        {hasPhoto ? (
-          <Image source={{ uri: imageUrl }} style={[styles.memberDetailAvatar, { borderColor: primaryColor }]} />
-        ) : (
-          <View style={[styles.memberDetailAvatarFallback, { borderColor: primaryColor }]}>
-            <Text style={[styles.memberDetailAvatarInitials, { color: primaryColor }]}>{memberInitials(person)}</Text>
-          </View>
-        )}
+        <MemberAvatar person={person} borderColor={primaryColor} size={52} showPhoto={showMemberPhotos} initialsFontScale={0.34} />
 
         <View style={styles.memberDetailHeaderText}>
           <Text style={styles.memberDetailName} numberOfLines={2}>
@@ -125,27 +83,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-  },
-  memberDetailAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
-    backgroundColor: "#ffffff",
-  },
-  memberDetailAvatarFallback: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
-    backgroundColor: "#eef5f2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  memberDetailAvatarInitials: {
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: 0.4,
   },
   memberDetailHeaderText: {
     flex: 1,
