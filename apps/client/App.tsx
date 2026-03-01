@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -31,6 +31,12 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: "MEMBERS", label: "Members" },
   { key: "RELATIONSHIPS", label: "Relationships" },
 ];
+
+const tabIconByKey: Record<TabKey, "git-branch-outline" | "people-outline" | "swap-horizontal-outline"> = {
+  TREE: "git-branch-outline",
+  MEMBERS: "people-outline",
+  RELATIONSHIPS: "swap-horizontal-outline",
+};
 
 const genderOptions: (Gender | "")[] = ["", "MALE", "FEMALE", "NON_BINARY", "OTHER"];
 const parentTypeOptions: ParentType[] = ["BIOLOGICAL", "ADOPTIVE", "STEP", "GUARDIAN"];
@@ -134,6 +140,37 @@ const App = () => {
   const [secondaryColorInput, setSecondaryColorInput] = useState(initialTheme.secondaryColor);
   const [showCustomizeToolbar, setShowCustomizeToolbar] = useState(true);
   const [sidebarEnabled, setSidebarEnabled] = useState(false);
+  const [showSidebarHoverToggle, setShowSidebarHoverToggle] = useState(false);
+  const sidebarToggleHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSidebarToggleHideTimer = () => {
+    if (!sidebarToggleHideTimerRef.current) {
+      return;
+    }
+
+    clearTimeout(sidebarToggleHideTimerRef.current);
+    sidebarToggleHideTimerRef.current = null;
+  };
+
+  const revealSidebarToggle = () => {
+    clearSidebarToggleHideTimer();
+    setShowSidebarHoverToggle(true);
+  };
+
+  const hideSidebarToggleWithDelay = () => {
+    clearSidebarToggleHideTimer();
+    sidebarToggleHideTimerRef.current = setTimeout(() => {
+      setShowSidebarHoverToggle(false);
+      sidebarToggleHideTimerRef.current = null;
+    }, 140);
+  };
+
+  useEffect(
+    () => () => {
+      clearSidebarToggleHideTimer();
+    },
+    [],
+  );
 
   const activeThemePreset = useMemo(
     () => themePresets.find((preset) => preset.id === selectedThemeId) ?? themePresets[0],
@@ -225,45 +262,94 @@ const App = () => {
             onToggleSidebar={() => setSidebarEnabled((previous) => !previous)}
           />
         ) : (
-          <View style={[styles.workspace, sidebarEnabled && isWideLayout && styles.workspaceWide]}>
-            {sidebarEnabled ? (
-              <View
+          <View style={[styles.workspace, isWideLayout && styles.workspaceWide]}>
+            {sidebarEnabled || isWideLayout ? (
+              <Pressable
                 style={[
                   styles.sidebar,
                   !isWideLayout && styles.sidebarStacked,
+                  !sidebarEnabled && isWideLayout && styles.sidebarCollapsed,
                   { backgroundColor: uiTheme.secondaryColor, borderColor: uiTheme.primaryColor },
                 ]}
+                onHoverIn={revealSidebarToggle}
+                onHoverOut={hideSidebarToggleWithDelay}
               >
-                <Text style={[styles.sidebarTitle, { color: uiTheme.primaryColor }]}>Sidebar</Text>
-                <Text style={styles.sidebarHint}>Quick navigation and summary</Text>
-                {tabs.map((tab) => (
-                  <Pressable
-                    key={`sidebar-${tab.key}`}
-                    style={[
-                      styles.sidebarNavButton,
-                      {
-                        borderColor: uiTheme.primaryColor,
-                        backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
-                      },
-                    ]}
-                    onPress={() => setActiveTab(tab.key)}
-                  >
-                    <Text
-                      style={[
-                        styles.sidebarNavButtonText,
-                        { color: activeTab === tab.key ? uiTheme.textOnPrimary : uiTheme.primaryColor },
-                      ]}
-                    >
-                      {tab.label}
-                    </Text>
-                  </Pressable>
-                ))}
-                <View style={styles.sidebarStatsBlock}>
-                  <Text style={styles.sidebarStatsText}>Members: {graph.persons.length}</Text>
-                  <Text style={styles.sidebarStatsText}>Parent Links: {graph.parentChildRelations.length}</Text>
-                  <Text style={styles.sidebarStatsText}>Spouse Links: {graph.spouseRelations.length}</Text>
-                </View>
-              </View>
+                <Pressable
+                  style={[
+                    styles.sidebarHoverToggleButton,
+                    { borderColor: uiTheme.primaryColor, backgroundColor: uiTheme.surfaceColor },
+                    !showSidebarHoverToggle && styles.sidebarHoverToggleButtonHidden,
+                  ]}
+                  pointerEvents={showSidebarHoverToggle ? "auto" : "none"}
+                  onHoverIn={revealSidebarToggle}
+                  onHoverOut={hideSidebarToggleWithDelay}
+                  onPress={() => setSidebarEnabled((previous) => !previous)}
+                >
+                  <Ionicons
+                    name={sidebarEnabled ? "chevron-back" : "chevron-forward"}
+                    size={16}
+                    color={uiTheme.primaryColor}
+                  />
+                </Pressable>
+
+                {sidebarEnabled ? (
+                  <>
+                    <Text style={[styles.sidebarTitle, { color: uiTheme.primaryColor }]}>Sidebar</Text>
+                    <Text style={styles.sidebarHint}>Quick navigation and summary</Text>
+                    {tabs.map((tab) => (
+                      <Pressable
+                        key={`sidebar-${tab.key}`}
+                        style={[
+                          styles.sidebarNavButton,
+                          {
+                            borderColor: uiTheme.primaryColor,
+                            backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
+                          },
+                        ]}
+                        onPress={() => setActiveTab(tab.key)}
+                      >
+                        <Text
+                          style={[
+                            styles.sidebarNavButtonText,
+                            { color: activeTab === tab.key ? uiTheme.textOnPrimary : uiTheme.primaryColor },
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                    <View style={styles.sidebarStatsBlock}>
+                      <Text style={styles.sidebarStatsText}>Members: {graph.persons.length}</Text>
+                      <Text style={styles.sidebarStatsText}>Parent Links: {graph.parentChildRelations.length}</Text>
+                      <Text style={styles.sidebarStatsText}>Spouse Links: {graph.spouseRelations.length}</Text>
+                    </View>
+                  </>
+                ) : null}
+
+                {!sidebarEnabled && isWideLayout ? (
+                  <View style={styles.sidebarCollapsedTabs}>
+                    {tabs.map((tab) => (
+                      <Pressable
+                        key={`collapsed-sidebar-${tab.key}`}
+                        style={[
+                          styles.sidebarCollapsedTabButton,
+                          {
+                            borderColor: uiTheme.primaryColor,
+                            backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
+                          },
+                        ]}
+                        onPress={() => setActiveTab(tab.key)}
+                      >
+                        <Ionicons
+                          name={tabIconByKey[tab.key]}
+                          size={18}
+                          color={activeTab === tab.key ? uiTheme.textOnPrimary : uiTheme.primaryColor}
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </Pressable>
             ) : null}
 
             <View style={styles.mainWorkspace}>
@@ -1412,11 +1498,49 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sidebar: {
+    position: "relative",
+    overflow: "visible",
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
     minWidth: 210,
+  },
+  sidebarCollapsed: {
+    minWidth: 58,
+    width: 58,
+    paddingTop: 36,
+    paddingBottom: 8,
+    paddingHorizontal: 8,
+    alignItems: "center",
+  },
+  sidebarHoverToggleButton: {
+    position: "absolute",
+    top: 6,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  sidebarHoverToggleButtonHidden: {
+    opacity: 0,
+  },
+  sidebarCollapsedTabs: {
+    width: "100%",
+    alignItems: "center",
+    gap: 8,
+  },
+  sidebarCollapsedTabButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sidebarStacked: {
     width: "100%",
