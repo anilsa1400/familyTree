@@ -137,6 +137,150 @@ const pageKeyBySlug: Record<string, AppPage> = {
 
 const displayName = (person: Person) => `${person.firstName} ${person.lastName}`.trim();
 
+type FamilyGroup = {
+  key: string;
+  familyName: string;
+  members: Person[];
+};
+
+const familyNameFromLastName = (lastName: string | null | undefined) => {
+  const trimmed = (lastName ?? "").trim();
+  return trimmed.length > 0 ? trimmed : "Unknown";
+};
+
+const buildFamilyNameMap = (graph: FamilyGraph): Map<string, string> => {
+  const personById = new Map<string, Person>();
+  graph.persons.forEach((person) => {
+    personById.set(person.id, person);
+  });
+
+  const parentIdsByChild = new Map<string, string[]>();
+  graph.parentChildRelations.forEach((relation) => {
+    const parentIds = parentIdsByChild.get(relation.childId) ?? [];
+    parentIds.push(relation.parentId);
+    parentIdsByChild.set(relation.childId, parentIds);
+  });
+
+  const spouseRelationsByPerson = new Map<string, SpouseRelation[]>();
+  graph.spouseRelations.forEach((relation) => {
+    const listA = spouseRelationsByPerson.get(relation.personAId) ?? [];
+    listA.push(relation);
+    spouseRelationsByPerson.set(relation.personAId, listA);
+
+    const listB = spouseRelationsByPerson.get(relation.personBId) ?? [];
+    listB.push(relation);
+    spouseRelationsByPerson.set(relation.personBId, listB);
+  });
+
+  const birthFamilyMemo = new Map<string, string>();
+  const resolvingBirth = new Set<string>();
+
+  const resolveBirthFamily = (personId: string): string => {
+    if (birthFamilyMemo.has(personId)) {
+      return birthFamilyMemo.get(personId) ?? "Unknown";
+    }
+
+    const self = personById.get(personId);
+    if (!self) {
+      return "Unknown";
+    }
+
+    if (resolvingBirth.has(personId)) {
+      return familyNameFromLastName(self.lastName);
+    }
+
+    resolvingBirth.add(personId);
+
+    const parentIds = parentIdsByChild.get(personId) ?? [];
+    let familyName = familyNameFromLastName(self.lastName);
+
+    if (parentIds.length > 0) {
+      const fatherId = parentIds.find((parentId) => personById.get(parentId)?.gender === "MALE");
+      const motherId = parentIds.find((parentId) => personById.get(parentId)?.gender === "FEMALE");
+      const lineageParentId = fatherId ?? motherId ?? parentIds[0];
+
+      if (lineageParentId) {
+        familyName = resolveBirthFamily(lineageParentId);
+      }
+    }
+
+    birthFamilyMemo.set(personId, familyName);
+    resolvingBirth.delete(personId);
+    return familyName;
+  };
+
+  const resolveHusbandIdForPerson = (personId: string): string | null => {
+    const relations = (spouseRelationsByPerson.get(personId) ?? []).filter((relation) => !relation.divorcedAt);
+    if (relations.length === 0) {
+      return null;
+    }
+
+    const normalized = [...relations].sort((left, right) => {
+      const leftDate = left.marriedAt ?? left.createdAt;
+      const rightDate = right.marriedAt ?? right.createdAt;
+      return rightDate.localeCompare(leftDate);
+    });
+
+    for (const relation of normalized) {
+      const spouseId = relation.personAId === personId ? relation.personBId : relation.personAId;
+      const spouse = personById.get(spouseId);
+      if (spouse?.gender === "MALE") {
+        return spouseId;
+      }
+    }
+
+    return null;
+  };
+
+  const finalFamilyMap = new Map<string, string>();
+
+  graph.persons.forEach((person) => {
+    let familyName = resolveBirthFamily(person.id);
+
+    if (person.gender === "FEMALE") {
+      const husbandId = resolveHusbandIdForPerson(person.id);
+      if (husbandId) {
+        familyName = resolveBirthFamily(husbandId);
+      }
+    }
+
+    finalFamilyMap.set(person.id, familyName);
+  });
+
+  return finalFamilyMap;
+};
+
+const groupMembersByFamilyName = (
+  persons: Person[],
+  familyNameByPersonId: Map<string, string>,
+): FamilyGroup[] => {
+  const groups = new Map<string, FamilyGroup>();
+
+  persons.forEach((person) => {
+    const familyName = familyNameByPersonId.get(person.id) ?? familyNameFromLastName(person.lastName);
+    const key = familyName.toLowerCase();
+    const current = groups.get(key);
+
+    if (current) {
+      current.members.push(person);
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      familyName,
+      members: [person],
+    });
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      members: [...group.members].sort((a, b) => displayName(a).localeCompare(displayName(b))),
+    }))
+    .sort((a, b) => a.familyName.localeCompare(b.familyName));
+};
+
 const formatDate = (value: string | null) => {
   if (!value) {
     return "";
@@ -528,6 +672,7 @@ const App = () => {
     createSpouse,
     deleteSpouse,
   } = useFamilyTree();
+  const familyNameByPersonId = useMemo(() => buildFamilyNameMap(graph), [graph]);
 
   const homeHeaderByTab: Record<TabKey, { title: string; description: string }> = {
     TREE: {
@@ -789,6 +934,7 @@ const App = () => {
                       primaryColor={uiTheme.primaryColor}
                       secondaryColor={uiTheme.secondaryColor}
                       showMemberPhotos={showMemberPhotos}
+                      familyNameByPersonId={familyNameByPersonId}
                       onRefresh={handleRefresh}
                       isRefreshing={showRefreshIndicator}
                     />
@@ -800,6 +946,7 @@ const App = () => {
                       isMutating={isMutating}
                       primaryColor={uiTheme.primaryColor}
                       secondaryColor={uiTheme.secondaryColor}
+                      familyNameByPersonId={familyNameByPersonId}
                       onCreate={createPerson}
                       onUpdate={updatePerson}
                       onDelete={deletePerson}
@@ -814,6 +961,7 @@ const App = () => {
                       isMutating={isMutating}
                       primaryColor={uiTheme.primaryColor}
                       secondaryColor={uiTheme.secondaryColor}
+                      familyNameByPersonId={familyNameByPersonId}
                       onCreateParentChild={createParentChild}
                       onDeleteParentChild={deleteParentChild}
                       onCreateSpouse={createSpouse}
@@ -1025,6 +1173,7 @@ type MembersPanelProps = {
   isMutating: boolean;
   primaryColor: string;
   secondaryColor: string;
+  familyNameByPersonId: Map<string, string>;
   onCreate: (payload: PersonInput) => Promise<void>;
   onUpdate: (personId: string, payload: PersonInput) => Promise<void>;
   onDelete: (personId: string) => Promise<void>;
@@ -1037,6 +1186,7 @@ const MembersPanel = ({
   isMutating,
   primaryColor,
   secondaryColor,
+  familyNameByPersonId,
   onCreate,
   onUpdate,
   onDelete,
@@ -1050,8 +1200,13 @@ const MembersPanel = ({
     () => [...persons].sort((a, b) => displayName(a).localeCompare(displayName(b))),
     [persons],
   );
+  const groupedFamilies = useMemo(
+    () => groupMembersByFamilyName(sortedPersons, familyNameByPersonId),
+    [sortedPersons, familyNameByPersonId],
+  );
 
   const selectedPerson = sortedPersons.find((person) => person.id === selectedPersonId) ?? null;
+  const selectedPersonFamilyName = selectedPerson ? familyNameByPersonId.get(selectedPerson.id) ?? "Unknown" : null;
 
   const selectPerson = (person: Person | null) => {
     if (!person) {
@@ -1102,10 +1257,16 @@ const MembersPanel = ({
       <View style={styles.panelHeaderRow}>
         <View style={styles.panelHeaderTextBlock}>
           <Text style={styles.panelTitle}>Members</Text>
-          <Text style={styles.panelHint}>Create, edit, and delete family members.</Text>
+          <Text style={styles.panelHint}>Create, edit, and delete family members grouped by family name.</Text>
         </View>
         <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
       </View>
+
+      {selectedPersonFamilyName ? (
+        <Text style={[styles.memberFamilyBadge, { borderColor: primaryColor, color: primaryColor }]}>
+          Linked Family: {selectedPersonFamilyName} Family
+        </Text>
+      ) : null}
 
       <Text style={styles.label}>Select Existing Member</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
@@ -1121,29 +1282,45 @@ const MembersPanel = ({
             New Member
           </Text>
         </Pressable>
-
-        {sortedPersons.map((person) => (
-          <Pressable
-            key={person.id}
-            style={[
-              styles.selectorPill,
-              { borderColor: primaryColor },
-              selectedPersonId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
-            ]}
-            onPress={() => selectPerson(person)}
-          >
-            <Text
-              style={[
-                styles.selectorPillText,
-                { color: primaryColor },
-                selectedPersonId === person.id && styles.selectorPillTextActive,
-              ]}
-            >
-              {displayName(person)}
-            </Text>
-          </Pressable>
-        ))}
       </ScrollView>
+
+      <View style={styles.familyGroupsContainer}>
+        {groupedFamilies.map((familyGroup) => (
+          <View
+            key={`family-group-${familyGroup.key}`}
+            style={[styles.familyGroupCard, { borderColor: primaryColor, backgroundColor: `${secondaryColor}77` }, styles.shadowSoft]}
+          >
+            <View style={styles.familyGroupHeaderRow}>
+              <Text style={[styles.familyGroupTitle, { color: primaryColor }]}>{familyGroup.familyName} Family</Text>
+              <Text style={styles.familyGroupCount}>{familyGroup.members.length} member(s)</Text>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+              {familyGroup.members.map((person) => (
+                <Pressable
+                  key={person.id}
+                  style={[
+                    styles.selectorPill,
+                    { borderColor: primaryColor, backgroundColor: "#ffffff" },
+                    selectedPersonId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
+                  ]}
+                  onPress={() => selectPerson(person)}
+                >
+                  <Text
+                    style={[
+                      styles.selectorPillText,
+                      { color: primaryColor },
+                      selectedPersonId === person.id && styles.selectorPillTextActive,
+                    ]}
+                  >
+                    {displayName(person)}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ))}
+      </View>
 
       <Text style={styles.label}>First Name</Text>
       <TextInput
@@ -1239,6 +1416,7 @@ type RelationshipsPanelProps = {
   isMutating: boolean;
   primaryColor: string;
   secondaryColor: string;
+  familyNameByPersonId: Map<string, string>;
   onCreateParentChild: (payload: { parentId: string; childId: string; relationType: ParentType }) => Promise<void>;
   onDeleteParentChild: (parentId: string, childId: string) => Promise<void>;
   onCreateSpouse: (payload: {
@@ -1257,6 +1435,7 @@ const RelationshipsPanel = ({
   isMutating,
   primaryColor,
   secondaryColor,
+  familyNameByPersonId,
   onCreateParentChild,
   onDeleteParentChild,
   onCreateSpouse,
@@ -1335,6 +1514,7 @@ const RelationshipsPanel = ({
         selectedId={parentId}
         onSelect={setParentId}
         primaryColor={primaryColor}
+        familyNameByPersonId={familyNameByPersonId}
       />
 
       <Text style={styles.label}>Child</Text>
@@ -1343,6 +1523,7 @@ const RelationshipsPanel = ({
         selectedId={childId}
         onSelect={setChildId}
         primaryColor={primaryColor}
+        familyNameByPersonId={familyNameByPersonId}
       />
 
       <Text style={styles.label}>Relationship Type</Text>
@@ -1415,6 +1596,7 @@ const RelationshipsPanel = ({
         selectedId={spouseAId}
         onSelect={setSpouseAId}
         primaryColor={primaryColor}
+        familyNameByPersonId={familyNameByPersonId}
       />
 
       <Text style={styles.label}>Person B</Text>
@@ -1423,6 +1605,7 @@ const RelationshipsPanel = ({
         selectedId={spouseBId}
         onSelect={setSpouseBId}
         primaryColor={primaryColor}
+        familyNameByPersonId={familyNameByPersonId}
       />
 
       <Text style={styles.label}>Married At (optional)</Text>
@@ -1485,39 +1668,61 @@ type HorizontalPersonSelectorProps = {
   selectedId: string;
   onSelect: (personId: string) => void;
   primaryColor: string;
+  familyNameByPersonId: Map<string, string>;
 };
 
-const HorizontalPersonSelector = ({ persons, selectedId, onSelect, primaryColor }: HorizontalPersonSelectorProps) => (
-  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
-    {persons.map((person) => (
-      <Pressable
-        key={person.id}
-        style={[
-          styles.selectorPill,
-          { borderColor: primaryColor },
-          selectedId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
-        ]}
-        onPress={() => onSelect(person.id)}
-      >
-        <Text
-          style={[
-            styles.selectorPillText,
-            { color: primaryColor },
-            selectedId === person.id && styles.selectorPillTextActive,
-          ]}
-        >
-          {displayName(person)}
-        </Text>
-      </Pressable>
-    ))}
-  </ScrollView>
-);
+const HorizontalPersonSelector = ({
+  persons,
+  selectedId,
+  onSelect,
+  primaryColor,
+  familyNameByPersonId,
+}: HorizontalPersonSelectorProps) => {
+  const groupedFamilies = useMemo(
+    () => groupMembersByFamilyName(persons, familyNameByPersonId),
+    [persons, familyNameByPersonId],
+  );
+
+  return (
+    <View style={styles.groupedSelectorContainer}>
+      {groupedFamilies.map((familyGroup) => (
+        <View key={`selector-family-${familyGroup.key}`} style={styles.groupedSelectorFamilyBlock}>
+          <Text style={[styles.groupedSelectorFamilyLabel, { color: primaryColor }]}>{familyGroup.familyName} Family</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+            {familyGroup.members.map((person) => (
+              <Pressable
+                key={person.id}
+                style={[
+                  styles.selectorPill,
+                  { borderColor: primaryColor },
+                  selectedId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
+                ]}
+                onPress={() => onSelect(person.id)}
+              >
+                <Text
+                  style={[
+                    styles.selectorPillText,
+                    { color: primaryColor },
+                    selectedId === person.id && styles.selectorPillTextActive,
+                  ]}
+                >
+                  {displayName(person)}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ))}
+    </View>
+  );
+};
 
 type TreePanelProps = {
   graph: FamilyGraph;
   primaryColor: string;
   secondaryColor: string;
   showMemberPhotos: boolean;
+  familyNameByPersonId: Map<string, string>;
   onRefresh: () => Promise<void>;
   isRefreshing: boolean;
 };
@@ -1594,15 +1799,17 @@ type TreePersonCardProps = {
   person: Person;
   primaryColor: string;
   showMemberPhotos: boolean;
+  familyName: string;
   spouseNames?: string[];
 };
 
-const TreePersonCard = ({ person, primaryColor, showMemberPhotos, spouseNames = [] }: TreePersonCardProps) => (
+const TreePersonCard = ({ person, primaryColor, showMemberPhotos, familyName, spouseNames = [] }: TreePersonCardProps) => (
   <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowSoft]}>
     <View style={styles.treePersonHeaderRow}>
       {showMemberPhotos ? <MemberPhoto person={person} primaryColor={primaryColor} /> : null}
       <View style={styles.treePersonDetailColumn}>
         <Text style={styles.treeName}>{displayName(person)}</Text>
+        <Text style={styles.treeMeta}>Family: {familyName}</Text>
         {person.gender ? <Text style={styles.treeMeta}>Gender: {person.gender}</Text> : null}
         {person.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(person.dateOfBirth)}</Text> : null}
         {spouseNames.length > 0 ? <Text style={styles.treeMeta}>Spouse(s): {spouseNames.join(", ")}</Text> : null}
@@ -1616,6 +1823,7 @@ const TreePanel = ({
   primaryColor,
   secondaryColor,
   showMemberPhotos,
+  familyNameByPersonId,
   onRefresh,
   isRefreshing,
 }: TreePanelProps) => {
@@ -1714,6 +1922,26 @@ const TreePanel = ({
     return nodes;
   }, [graph.persons, childIds, spouseIdsByPerson, personById]);
 
+  const rootNodesByFamily = useMemo(() => {
+    const grouped = new Map<string, TreeRenderNode[]>();
+
+    rootNodes.forEach((rootNode) => {
+      const familyName =
+        familyNameByPersonId.get(rootNode.personId) ??
+        familyNameFromLastName(personById.get(rootNode.personId)?.lastName);
+      const familyNodes = grouped.get(familyName) ?? [];
+      familyNodes.push(rootNode);
+      grouped.set(familyName, familyNodes);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([familyName, nodes]) => ({
+        familyName,
+        nodes,
+      }))
+      .sort((left, right) => left.familyName.localeCompare(right.familyName));
+  }, [rootNodes, familyNameByPersonId, personById]);
+
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(new Set());
 
   const toggleNode = (personId: string, partnerId?: string) => {
@@ -1772,23 +2000,32 @@ const TreePanel = ({
       {rootNodes.length === 0 ? (
         <Text style={styles.mutedText}>No members yet. Add a member in the Members tab.</Text>
       ) : (
-        rootNodes.map((rootNode) => (
-          <TreeNode
-            key={`${rootNode.personId}-${rootNode.partnerId ?? "single"}`}
-            personId={rootNode.personId}
-            partnerId={rootNode.partnerId}
-            depth={0}
-            path={new Set<string>()}
-            personById={personById}
-            childrenByParent={childrenByParent}
-            spouseByPerson={spouseByPerson}
-            spouseIdsByPerson={spouseIdsByPerson}
-            collapsedNodeIds={collapsedNodeIds}
-            primaryColor={primaryColor}
-            secondaryColor={secondaryColor}
-            showMemberPhotos={showMemberPhotos}
-            onToggle={toggleNode}
-          />
+        rootNodesByFamily.map((familyGroup) => (
+          <View
+            key={`tree-family-${familyGroup.familyName}`}
+            style={[styles.familyTreeGroupCard, { borderColor: primaryColor, backgroundColor: `${secondaryColor}66` }, styles.shadowSoft]}
+          >
+            <Text style={[styles.familyTreeGroupTitle, { color: primaryColor }]}>{familyGroup.familyName} Family</Text>
+            {familyGroup.nodes.map((rootNode) => (
+              <TreeNode
+                key={`${familyGroup.familyName}-${rootNode.personId}-${rootNode.partnerId ?? "single"}`}
+                personId={rootNode.personId}
+                partnerId={rootNode.partnerId}
+                depth={0}
+                path={new Set<string>()}
+                personById={personById}
+                childrenByParent={childrenByParent}
+                spouseByPerson={spouseByPerson}
+                spouseIdsByPerson={spouseIdsByPerson}
+                familyNameByPersonId={familyNameByPersonId}
+                collapsedNodeIds={collapsedNodeIds}
+                primaryColor={primaryColor}
+                secondaryColor={secondaryColor}
+                showMemberPhotos={showMemberPhotos}
+                onToggle={toggleNode}
+              />
+            ))}
+          </View>
         ))
       )}
     </View>
@@ -1804,6 +2041,7 @@ type TreeNodeProps = {
   childrenByParent: Map<string, string[]>;
   spouseByPerson: Map<string, SpouseRelation[]>;
   spouseIdsByPerson: Map<string, string[]>;
+  familyNameByPersonId: Map<string, string>;
   collapsedNodeIds: Set<string>;
   primaryColor: string;
   secondaryColor: string;
@@ -1820,6 +2058,7 @@ const TreeNode = ({
   childrenByParent,
   spouseByPerson,
   spouseIdsByPerson,
+  familyNameByPersonId,
   collapsedNodeIds,
   primaryColor,
   secondaryColor,
@@ -1897,6 +2136,10 @@ const TreeNode = ({
   });
 
   const spouseNames = Array.from(spouseNameSet).sort((a, b) => a.localeCompare(b));
+  const personFamilyName = familyNameByPersonId.get(personId) ?? familyNameFromLastName(person.lastName);
+  const partnerFamilyName = partner
+    ? familyNameByPersonId.get(partner.id) ?? familyNameFromLastName(partner.lastName)
+    : null;
   const hasChildren = childRenderNodes.length > 0;
   const isDepthLimitReached = depth >= MAX_GENERATION_DEPTH - 1;
   const canExpandChildren = hasChildren && !isDepthLimitReached;
@@ -1927,17 +2170,28 @@ const TreeNode = ({
 
         {partner ? (
           <View style={styles.treePairRow}>
-            <TreePersonCard person={person} primaryColor={primaryColor} showMemberPhotos={showMemberPhotos} />
+            <TreePersonCard
+              person={person}
+              primaryColor={primaryColor}
+              showMemberPhotos={showMemberPhotos}
+              familyName={personFamilyName}
+            />
 
             <View style={[styles.treePairConnector, { borderTopColor: primaryColor }]} />
 
-            <TreePersonCard person={partner} primaryColor={primaryColor} showMemberPhotos={showMemberPhotos} />
+            <TreePersonCard
+              person={partner}
+              primaryColor={primaryColor}
+              showMemberPhotos={showMemberPhotos}
+              familyName={partnerFamilyName ?? "Unknown"}
+            />
           </View>
         ) : (
           <TreePersonCard
             person={person}
             primaryColor={primaryColor}
             showMemberPhotos={showMemberPhotos}
+            familyName={personFamilyName}
             spouseNames={spouseNames}
           />
         )}
@@ -1964,6 +2218,7 @@ const TreeNode = ({
                 childrenByParent={childrenByParent}
                 spouseByPerson={spouseByPerson}
                 spouseIdsByPerson={spouseIdsByPerson}
+                familyNameByPersonId={familyNameByPersonId}
                 collapsedNodeIds={collapsedNodeIds}
                 primaryColor={primaryColor}
                 secondaryColor={secondaryColor}
@@ -2284,6 +2539,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: "#517467",
   },
+  memberFamilyBadge: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    fontSize: 12,
+    fontWeight: "700",
+    backgroundColor: "#ffffff",
+  },
   subsectionTitle: {
     marginTop: 12,
     marginBottom: 6,
@@ -2293,6 +2559,43 @@ const styles = StyleSheet.create({
   },
   selectorRow: {
     marginBottom: 12,
+  },
+  familyGroupsContainer: {
+    marginBottom: 10,
+    gap: 10,
+  },
+  familyGroupCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+  },
+  familyGroupHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+    gap: 8,
+  },
+  familyGroupTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  familyGroupCount: {
+    fontSize: 12,
+    color: "#3f6356",
+    fontWeight: "600",
+  },
+  groupedSelectorContainer: {
+    marginBottom: 8,
+    gap: 6,
+  },
+  groupedSelectorFamilyBlock: {
+    marginBottom: 2,
+  },
+  groupedSelectorFamilyLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 2,
   },
   selectorPill: {
     paddingVertical: 8,
@@ -2494,6 +2797,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginBottom: 12,
+  },
+  familyTreeGroupCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  familyTreeGroupTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    marginBottom: 8,
   },
   treeMiniButton: {
     paddingVertical: 6,
