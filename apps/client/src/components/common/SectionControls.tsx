@@ -65,13 +65,33 @@ export const SectionViewModeToggle = ({ primaryColor, viewMode, onToggle }: Sect
   const isTile = viewMode === "TILE";
 
   return (
-    <Pressable
-      style={[styles.sectionModeButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }, uiCommonStyles.shadowSoft]}
-      onPress={onToggle}
-    >
-      <Ionicons name={isTile ? "grid-outline" : "list-outline"} size={15} color={primaryColor} />
-      <Text style={[styles.sectionModeButtonText, { color: primaryColor }]}>{isTile ? "Tile" : "List"}</Text>
-    </Pressable>
+    <View style={[styles.sectionModeSegmented, { borderColor: primaryColor }, uiCommonStyles.shadowSoft]}>
+      <Pressable
+        style={[
+          styles.sectionModeSegmentButton,
+          styles.sectionModeSegmentButtonLeft,
+          { borderColor: primaryColor },
+          isTile && { backgroundColor: primaryColor },
+        ]}
+        onPress={!isTile ? onToggle : undefined}
+      >
+        <Ionicons name="grid-outline" size={15} color={isTile ? "#ffffff" : primaryColor} />
+        <Text style={[styles.sectionModeButtonText, { color: isTile ? "#ffffff" : primaryColor }]}>Tile</Text>
+      </Pressable>
+
+      <Pressable
+        style={[
+          styles.sectionModeSegmentButton,
+          styles.sectionModeSegmentButtonRight,
+          { borderColor: primaryColor },
+          !isTile && { backgroundColor: primaryColor },
+        ]}
+        onPress={isTile ? onToggle : undefined}
+      >
+        <Ionicons name="list-outline" size={15} color={!isTile ? "#ffffff" : primaryColor} />
+        <Text style={[styles.sectionModeButtonText, { color: !isTile ? "#ffffff" : primaryColor }]}>List</Text>
+      </Pressable>
+    </View>
   );
 };
 
@@ -89,15 +109,29 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "600",
   },
-  sectionModeButton: {
+  sectionModeSegmented: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingVertical: 7,
+    padding: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+  },
+  sectionModeSegmentButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
     paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     backgroundColor: "#ffffff",
+  },
+  sectionModeSegmentButtonLeft: {
+    marginRight: 4,
+  },
+  sectionModeSegmentButtonRight: {
+    marginLeft: 0,
   },
   sectionModeButtonText: {
     fontSize: 12,
