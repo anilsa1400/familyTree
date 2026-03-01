@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useFamilyTree } from "./src/hooks/useFamilyTree";
-import { API_BASE_URL } from "./src/lib/api";
+import { API_BASE_URL, getUiSettings, UiSettingsPayload, updateUiSettings } from "./src/lib/api";
 import {
   FamilyGraph,
   Gender,
@@ -84,6 +84,49 @@ const themePresets: ThemePreset[] = [
 
 const isHexColor = (value: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(value.trim());
 
+const uiPreferencesStorageKey = "family-tree-ui-preferences-v1";
+
+type UiPreferences = {
+  activeTab: TabKey;
+  activePage: AppPage;
+  selectedThemeId: ThemePresetId;
+  primaryColorInput: string;
+  secondaryColorInput: string;
+  showCustomizeToolbar: boolean;
+  sidebarEnabled: boolean;
+};
+
+const isTabKey = (value: unknown): value is TabKey =>
+  value === "TREE" || value === "MEMBERS" || value === "RELATIONSHIPS";
+
+const isAppPage = (value: unknown): value is AppPage =>
+  value === "HOME" || value === "SETTINGS";
+
+const isThemePresetId = (value: unknown): value is ThemePresetId =>
+  value === "FOREST" || value === "OCEAN" || value === "SUNSET" || value === "GRAPHITE";
+
+const tabSlugByKey: Record<TabKey, string> = {
+  TREE: "tree",
+  MEMBERS: "members",
+  RELATIONSHIPS: "relationships",
+};
+
+const tabKeyBySlug: Record<string, TabKey> = {
+  tree: "TREE",
+  members: "MEMBERS",
+  relationships: "RELATIONSHIPS",
+};
+
+const pageSlugByKey: Record<AppPage, string> = {
+  HOME: "home",
+  SETTINGS: "settings",
+};
+
+const pageKeyBySlug: Record<string, AppPage> = {
+  home: "HOME",
+  settings: "SETTINGS",
+};
+
 const displayName = (person: Person) => `${person.firstName} ${person.lastName}`.trim();
 
 const formatDate = (value: string | null) => {
@@ -141,7 +184,11 @@ const App = () => {
   const [showCustomizeToolbar, setShowCustomizeToolbar] = useState(true);
   const [sidebarEnabled, setSidebarEnabled] = useState(false);
   const [showSidebarHoverToggle, setShowSidebarHoverToggle] = useState(false);
+  const [isPreferencesHydrated, setIsPreferencesHydrated] = useState(false);
+  const [isServerSettingsHydrated, setIsServerSettingsHydrated] = useState(false);
   const sidebarToggleHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serverSettingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastServerSyncedSettingsRef = useRef<string>("");
 
   const clearSidebarToggleHideTimer = () => {
     if (!sidebarToggleHideTimerRef.current) {
@@ -150,6 +197,15 @@ const App = () => {
 
     clearTimeout(sidebarToggleHideTimerRef.current);
     sidebarToggleHideTimerRef.current = null;
+  };
+
+  const clearServerSettingsSaveTimer = () => {
+    if (!serverSettingsSaveTimerRef.current) {
+      return;
+    }
+
+    clearTimeout(serverSettingsSaveTimerRef.current);
+    serverSettingsSaveTimerRef.current = null;
   };
 
   const revealSidebarToggle = () => {
@@ -165,12 +221,242 @@ const App = () => {
     }, 140);
   };
 
+  const applyUrlSelection = () => {
+    if (typeof window === "undefined" || !window.location?.search) {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlTab = searchParams.get("tab")?.toLowerCase() ?? "";
+    const urlPage = searchParams.get("page")?.toLowerCase() ?? "";
+
+    if (tabKeyBySlug[urlTab]) {
+      setActiveTab(tabKeyBySlug[urlTab]);
+    }
+
+    if (pageKeyBySlug[urlPage]) {
+      setActivePage(pageKeyBySlug[urlPage]);
+    }
+  };
+
+  const applyUiSettings = (settings: UiSettingsPayload) => {
+    setActiveTab(settings.activeTab);
+    setActivePage(settings.activePage);
+    setSelectedThemeId(settings.selectedThemeId);
+    setPrimaryColorInput(settings.primaryColorInput);
+    setSecondaryColorInput(settings.secondaryColorInput);
+    setShowCustomizeToolbar(settings.showCustomizeToolbar);
+    setSidebarEnabled(settings.sidebarEnabled);
+  };
+
   useEffect(
     () => () => {
       clearSidebarToggleHideTimer();
+      clearServerSettingsSaveTimer();
     },
     [],
   );
+
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") {
+        setIsPreferencesHydrated(true);
+        return;
+      }
+
+      if (window.localStorage) {
+        const rawPreferences = window.localStorage.getItem(uiPreferencesStorageKey);
+        if (rawPreferences) {
+          const parsed = JSON.parse(rawPreferences) as Partial<UiPreferences>;
+
+          if (isTabKey(parsed.activeTab)) {
+            setActiveTab(parsed.activeTab);
+          }
+
+          if (isAppPage(parsed.activePage)) {
+            setActivePage(parsed.activePage);
+          }
+
+          if (isThemePresetId(parsed.selectedThemeId)) {
+            setSelectedThemeId(parsed.selectedThemeId);
+          }
+
+          if (typeof parsed.primaryColorInput === "string") {
+            setPrimaryColorInput(parsed.primaryColorInput);
+          }
+
+          if (typeof parsed.secondaryColorInput === "string") {
+            setSecondaryColorInput(parsed.secondaryColorInput);
+          }
+
+          if (typeof parsed.showCustomizeToolbar === "boolean") {
+            setShowCustomizeToolbar(parsed.showCustomizeToolbar);
+          }
+
+          if (typeof parsed.sidebarEnabled === "boolean") {
+            setSidebarEnabled(parsed.sidebarEnabled);
+          }
+        }
+      }
+
+      applyUrlSelection();
+    } catch {
+      // Ignore malformed preference state and keep defaults.
+    } finally {
+      setIsPreferencesHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateSettingsFromServer = async () => {
+      try {
+        const settings = await getUiSettings();
+        if (!isMounted) {
+          return;
+        }
+
+        const payload: UiSettingsPayload = {
+          activeTab: settings.activeTab,
+          activePage: settings.activePage,
+          selectedThemeId: settings.selectedThemeId,
+          primaryColorInput: settings.primaryColorInput,
+          secondaryColorInput: settings.secondaryColorInput,
+          showCustomizeToolbar: settings.showCustomizeToolbar,
+          sidebarEnabled: settings.sidebarEnabled,
+        };
+
+        applyUiSettings(payload);
+        lastServerSyncedSettingsRef.current = JSON.stringify(payload);
+
+        // URL query params should be authoritative when explicitly provided.
+        applyUrlSelection();
+      } catch {
+        // Ignore server hydration failures and continue with local/url settings.
+      } finally {
+        if (isMounted) {
+          setIsServerSettingsHydrated(true);
+        }
+      }
+    };
+
+    void hydrateSettingsFromServer();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isPreferencesHydrated) {
+      return;
+    }
+
+    try {
+      if (typeof window === "undefined" || !window.localStorage) {
+        return;
+      }
+
+      const preferences: UiPreferences = {
+        activeTab,
+        activePage,
+        selectedThemeId,
+        primaryColorInput,
+        secondaryColorInput,
+        showCustomizeToolbar,
+        sidebarEnabled,
+      };
+
+      window.localStorage.setItem(uiPreferencesStorageKey, JSON.stringify(preferences));
+    } catch {
+      // Ignore storage failures (private mode, disabled storage, etc.).
+    }
+  }, [
+    activeTab,
+    activePage,
+    selectedThemeId,
+    primaryColorInput,
+    secondaryColorInput,
+    showCustomizeToolbar,
+    sidebarEnabled,
+    isPreferencesHydrated,
+  ]);
+
+  useEffect(() => {
+    if (!isPreferencesHydrated || !isServerSettingsHydrated) {
+      return;
+    }
+
+    const payload: UiSettingsPayload = {
+      activeTab,
+      activePage,
+      selectedThemeId,
+      primaryColorInput,
+      secondaryColorInput,
+      showCustomizeToolbar,
+      sidebarEnabled,
+    };
+
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastServerSyncedSettingsRef.current) {
+      return;
+    }
+
+    clearServerSettingsSaveTimer();
+    serverSettingsSaveTimerRef.current = setTimeout(() => {
+      void updateUiSettings(payload)
+        .then(() => {
+          lastServerSyncedSettingsRef.current = serialized;
+        })
+        .catch(() => {
+          // Ignore transient server persistence failures.
+        })
+        .finally(() => {
+          serverSettingsSaveTimerRef.current = null;
+        });
+    }, 350);
+
+    return () => {
+      clearServerSettingsSaveTimer();
+    };
+  }, [
+    activeTab,
+    activePage,
+    selectedThemeId,
+    primaryColorInput,
+    secondaryColorInput,
+    showCustomizeToolbar,
+    sidebarEnabled,
+    isPreferencesHydrated,
+    isServerSettingsHydrated,
+  ]);
+
+  useEffect(() => {
+    if (!isPreferencesHydrated) {
+      return;
+    }
+
+    try {
+      if (typeof window === "undefined" || !window.history || !window.location) {
+        return;
+      }
+
+      const searchParams = new URLSearchParams(window.location.search);
+      searchParams.set("tab", tabSlugByKey[activeTab]);
+      searchParams.set("page", pageSlugByKey[activePage]);
+
+      const nextSearch = searchParams.toString();
+      const nextUrl = `${window.location.pathname}?${nextSearch}${window.location.hash}`;
+      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+      if (nextUrl !== currentUrl) {
+        window.history.replaceState(null, "", nextUrl);
+      }
+    } catch {
+      // Ignore URL sync failures in restricted environments.
+    }
+  }, [activeTab, activePage, isPreferencesHydrated]);
 
   const activeThemePreset = useMemo(
     () => themePresets.find((preset) => preset.id === selectedThemeId) ?? themePresets[0],

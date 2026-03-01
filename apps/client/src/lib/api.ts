@@ -87,4 +87,26 @@ export const deleteSpouseRelation = (personAId: string, personBId: string) =>
     },
   );
 
+export type UiSettingsPayload = {
+  activeTab: "TREE" | "MEMBERS" | "RELATIONSHIPS";
+  activePage: "HOME" | "SETTINGS";
+  selectedThemeId: "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
+  primaryColorInput: string;
+  secondaryColorInput: string;
+  showCustomizeToolbar: boolean;
+  sidebarEnabled: boolean;
+};
+
+export type UiSettingsResponse = UiSettingsPayload & {
+  updatedAt: string;
+};
+
+export const getUiSettings = () => request<UiSettingsResponse>("/api/settings/ui");
+
+export const updateUiSettings = (payload: UiSettingsPayload) =>
+  request<UiSettingsResponse>("/api/settings/ui", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
 export { ApiError, API_BASE_URL };

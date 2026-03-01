@@ -89,6 +89,8 @@ npm run db:seed
 - `POST /api/persons`
 - `PUT /api/persons/:id`
 - `DELETE /api/persons/:id`
+- `GET /api/settings/ui`
+- `PUT /api/settings/ui`
 - `POST /api/relations/parent-child`
 - `DELETE /api/relations/parent-child?parentId=<id>&childId=<id>`
 - `POST /api/relations/spouse`
@@ -99,3 +101,4 @@ npm run db:seed
 - Parent-child creation prevents cycles.
 - Spouse links are normalized (A/B order) to avoid duplicates.
 - Deleting a person cascades to their relationships.
+- UI preferences (tab/page/theme/colors/layout toggles) are stored in SQLite and restored on restart.

@@ -33,3 +33,15 @@ export type SpouseRelationRecord = {
   divorced_at: string | null;
   created_at: string;
 };
+
+export type UiSettingsRecord = {
+  id: number;
+  active_tab: "TREE" | "MEMBERS" | "RELATIONSHIPS";
+  active_page: "HOME" | "SETTINGS";
+  selected_theme_id: "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
+  primary_color_input: string;
+  secondary_color_input: string;
+  show_customize_toolbar: 0 | 1;
+  sidebar_enabled: 0 | 1;
+  updated_at: string;
+};

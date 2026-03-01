@@ -48,8 +48,42 @@ CREATE TABLE IF NOT EXISTS spouse_relations (
   FOREIGN KEY(person_b_id) REFERENCES persons(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS ui_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  active_tab TEXT NOT NULL,
+  active_page TEXT NOT NULL,
+  selected_theme_id TEXT NOT NULL,
+  primary_color_input TEXT NOT NULL,
+  secondary_color_input TEXT NOT NULL,
+  show_customize_toolbar INTEGER NOT NULL,
+  sidebar_enabled INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_parent_child_parent_id ON parent_child_relations(parent_id);
 CREATE INDEX IF NOT EXISTS idx_parent_child_child_id ON parent_child_relations(child_id);
 CREATE INDEX IF NOT EXISTS idx_spouse_a_id ON spouse_relations(person_a_id);
 CREATE INDEX IF NOT EXISTS idx_spouse_b_id ON spouse_relations(person_b_id);
+
+INSERT OR IGNORE INTO ui_settings (
+  id,
+  active_tab,
+  active_page,
+  selected_theme_id,
+  primary_color_input,
+  secondary_color_input,
+  show_customize_toolbar,
+  sidebar_enabled,
+  updated_at
+) VALUES (
+  1,
+  'TREE',
+  'HOME',
+  'FOREST',
+  '#2e5f4f',
+  '#d9e6de',
+  1,
+  0,
+  CURRENT_TIMESTAMP
+);
 `);

@@ -9,6 +9,7 @@ import {
   parentChildInputSchema,
   personInputSchema,
   spouseInputSchema,
+  uiSettingsInputSchema,
 } from "./schema";
 import {
   FamilyGraph,
@@ -20,6 +21,7 @@ import {
   ParentChildRelationRecord,
   PersonRecord,
   SpouseRelationRecord,
+  UiSettingsRecord,
 } from "./types";
 import { toPersonDbInput, toSpouseDbInput } from "./transform";
 
@@ -35,6 +37,7 @@ const findPersonById = db.prepare("SELECT * FROM persons WHERE id = ?");
 const getPersons = db.prepare("SELECT * FROM persons ORDER BY first_name ASC, last_name ASC");
 const getParentChildRelations = db.prepare("SELECT * FROM parent_child_relations ORDER BY created_at ASC");
 const getSpouseRelations = db.prepare("SELECT * FROM spouse_relations ORDER BY created_at ASC");
+const getUiSettings = db.prepare("SELECT * FROM ui_settings WHERE id = 1");
 
 const buildFamilyGraph = (): FamilyGraph => {
   const persons = getPersons.all() as PersonRecord[];
@@ -83,6 +86,17 @@ const wouldCreateParentChildCycle = (parentId: string, childId: string) => {
   return false;
 };
 
+const serializeUiSettings = (settings: UiSettingsRecord) => ({
+  activeTab: settings.active_tab,
+  activePage: settings.active_page,
+  selectedThemeId: settings.selected_theme_id,
+  primaryColorInput: settings.primary_color_input,
+  secondaryColorInput: settings.secondary_color_input,
+  showCustomizeToolbar: settings.show_customize_toolbar === 1,
+  sidebarEnabled: settings.sidebar_enabled === 1,
+  updatedAt: settings.updated_at,
+});
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
@@ -90,6 +104,58 @@ app.get("/health", (_req, res) => {
 app.get("/api/tree", (_req, res, next) => {
   try {
     res.json(buildFamilyGraph());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/settings/ui", (_req, res, next) => {
+  try {
+    const settings = getUiSettings.get() as UiSettingsRecord | undefined;
+    if (!settings) {
+      res.status(404).json({ message: "UI settings were not found." });
+      return;
+    }
+
+    res.json(serializeUiSettings(settings));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/settings/ui", (req, res, next) => {
+  try {
+    const payload = uiSettingsInputSchema.parse(req.body);
+
+    db.prepare(
+      `UPDATE ui_settings
+       SET active_tab = ?,
+           active_page = ?,
+           selected_theme_id = ?,
+           primary_color_input = ?,
+           secondary_color_input = ?,
+           show_customize_toolbar = ?,
+           sidebar_enabled = ?,
+           updated_at = ?
+       WHERE id = 1`,
+    ).run(
+      payload.activeTab,
+      payload.activePage,
+      payload.selectedThemeId,
+      payload.primaryColorInput,
+      payload.secondaryColorInput,
+      payload.showCustomizeToolbar ? 1 : 0,
+      payload.sidebarEnabled ? 1 : 0,
+      nowIso(),
+    );
+
+    const settings = getUiSettings.get() as UiSettingsRecord | undefined;
+    if (!settings) {
+      res.status(404).json({ message: "UI settings were not found." });
+      return;
+    }
+
+    res.json(serializeUiSettings(settings));
   } catch (error) {
     next(error);
   }

@@ -40,6 +40,19 @@ export const deleteSpouseSchema = z.object({
   personBId: z.string().trim().min(1),
 });
 
+const hexColor = z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/);
+
+export const uiSettingsInputSchema = z.object({
+  activeTab: z.enum(["TREE", "MEMBERS", "RELATIONSHIPS"]),
+  activePage: z.enum(["HOME", "SETTINGS"]),
+  selectedThemeId: z.enum(["FOREST", "OCEAN", "SUNSET", "GRAPHITE"]),
+  primaryColorInput: hexColor,
+  secondaryColorInput: hexColor,
+  showCustomizeToolbar: z.boolean(),
+  sidebarEnabled: z.boolean(),
+});
+
 export type PersonInput = z.infer<typeof personInputSchema>;
 export type ParentChildInput = z.infer<typeof parentChildInputSchema>;
 export type SpouseInput = z.infer<typeof spouseInputSchema>;
+export type UiSettingsInput = z.infer<typeof uiSettingsInputSchema>;
