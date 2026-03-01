@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -8,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useFamilyTree } from "./src/hooks/useFamilyTree";
@@ -22,6 +24,7 @@ import {
 } from "./src/types/family";
 
 type TabKey = "TREE" | "MEMBERS" | "RELATIONSHIPS";
+type AppPage = "HOME" | "SETTINGS";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "TREE", label: "Tree" },
@@ -31,6 +34,49 @@ const tabs: { key: TabKey; label: string }[] = [
 
 const genderOptions: (Gender | "")[] = ["", "MALE", "FEMALE", "NON_BINARY", "OTHER"];
 const parentTypeOptions: ParentType[] = ["BIOLOGICAL", "ADOPTIVE", "STEP", "GUARDIAN"];
+
+type ThemePresetId = "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
+
+type ThemePreset = {
+  id: ThemePresetId;
+  label: string;
+  backgroundColor: string;
+  primaryColor: string;
+  secondaryColor: string;
+};
+
+const themePresets: ThemePreset[] = [
+  {
+    id: "FOREST",
+    label: "Forest",
+    backgroundColor: "#eef2ee",
+    primaryColor: "#2e5f4f",
+    secondaryColor: "#d9e6de",
+  },
+  {
+    id: "OCEAN",
+    label: "Ocean",
+    backgroundColor: "#edf4f8",
+    primaryColor: "#1e5d8c",
+    secondaryColor: "#d5e7f3",
+  },
+  {
+    id: "SUNSET",
+    label: "Sunset",
+    backgroundColor: "#fff4ec",
+    primaryColor: "#a24d2f",
+    secondaryColor: "#f3ddd2",
+  },
+  {
+    id: "GRAPHITE",
+    label: "Graphite",
+    backgroundColor: "#f1f2f4",
+    primaryColor: "#3a4552",
+    secondaryColor: "#dce2e8",
+  },
+];
+
+const isHexColor = (value: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(value.trim());
 
 const displayName = (person: Person) => `${person.firstName} ${person.lastName}`.trim();
 
@@ -78,7 +124,53 @@ const buildPersonPayload = (state: PersonFormState): PersonInput => ({
 });
 
 const App = () => {
+  const { width } = useWindowDimensions();
+  const isWideLayout = width >= 980;
   const [activeTab, setActiveTab] = useState<TabKey>("TREE");
+  const [activePage, setActivePage] = useState<AppPage>("HOME");
+  const [selectedThemeId, setSelectedThemeId] = useState<ThemePresetId>("FOREST");
+  const initialTheme = themePresets.find((preset) => preset.id === "FOREST") ?? themePresets[0];
+  const [primaryColorInput, setPrimaryColorInput] = useState(initialTheme.primaryColor);
+  const [secondaryColorInput, setSecondaryColorInput] = useState(initialTheme.secondaryColor);
+  const [showCustomizeToolbar, setShowCustomizeToolbar] = useState(true);
+  const [sidebarEnabled, setSidebarEnabled] = useState(false);
+
+  const activeThemePreset = useMemo(
+    () => themePresets.find((preset) => preset.id === selectedThemeId) ?? themePresets[0],
+    [selectedThemeId],
+  );
+
+  const resolvedPrimaryColor = isHexColor(primaryColorInput)
+    ? primaryColorInput.trim()
+    : activeThemePreset.primaryColor;
+  const resolvedSecondaryColor = isHexColor(secondaryColorInput)
+    ? secondaryColorInput.trim()
+    : activeThemePreset.secondaryColor;
+
+  const uiTheme = useMemo(
+    () => ({
+      backgroundColor: activeThemePreset.backgroundColor,
+      primaryColor: resolvedPrimaryColor,
+      secondaryColor: resolvedSecondaryColor,
+      surfaceColor: "#ffffff",
+      subtitleColor: "#507166",
+      textOnPrimary: "#ffffff",
+      panelBorderColor: resolvedSecondaryColor,
+    }),
+    [activeThemePreset, resolvedPrimaryColor, resolvedSecondaryColor],
+  );
+
+  const applyThemePreset = (presetId: ThemePresetId) => {
+    const preset = themePresets.find((item) => item.id === presetId);
+    if (!preset) {
+      return;
+    }
+
+    setSelectedThemeId(preset.id);
+    setPrimaryColorInput(preset.primaryColor);
+    setSecondaryColorInput(preset.secondaryColor);
+  };
+
   const {
     graph,
     error,
@@ -95,80 +187,366 @@ const App = () => {
   } = useFamilyTree();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: uiTheme.backgroundColor }]}>
       <StatusBar style="dark" />
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Family Tree Platform</Text>
-          <Text style={styles.subtitle}>Web, Android, iOS | API: {API_BASE_URL}</Text>
-        </View>
-
-        <View style={styles.tabRow}>
-          {tabs.map((tab) => (
-            <Pressable
-              key={tab.key}
-              style={[styles.tabButton, activeTab === tab.key && styles.tabButtonActive]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
-            </Pressable>
-          ))}
-          <Pressable style={styles.refreshButton} onPress={() => void reload()}>
-            <Text style={styles.refreshButtonText}>Refresh</Text>
+        <View style={styles.headerTopRow}>
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: uiTheme.primaryColor }]}>Family Tree Platform</Text>
+            <Text style={[styles.subtitle, { color: uiTheme.subtitleColor }]}>Web, Android, iOS | API: {API_BASE_URL}</Text>
+          </View>
+          <Pressable
+            style={[
+              styles.settingsIconButton,
+              {
+                backgroundColor: uiTheme.secondaryColor,
+                borderColor: uiTheme.primaryColor,
+              },
+            ]}
+            onPress={() => setActivePage((previous) => (previous === "HOME" ? "SETTINGS" : "HOME"))}
+          >
+            <Ionicons name={activePage === "HOME" ? "settings-outline" : "arrow-back"} size={20} color={uiTheme.primaryColor} />
           </Pressable>
         </View>
 
-        {error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-
-        {isLoading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color="#2e5f4f" />
-            <Text style={styles.mutedText}>Loading family graph...</Text>
-          </View>
+        {activePage === "SETTINGS" ? (
+          <SettingsPage
+            selectedThemeId={selectedThemeId}
+            primaryColorInput={primaryColorInput}
+            secondaryColorInput={secondaryColorInput}
+            showCustomizeToolbar={showCustomizeToolbar}
+            sidebarEnabled={sidebarEnabled}
+            resolvedPrimaryColor={resolvedPrimaryColor}
+            resolvedSecondaryColor={resolvedSecondaryColor}
+            onPresetSelect={applyThemePreset}
+            onPrimaryColorChange={setPrimaryColorInput}
+            onSecondaryColorChange={setSecondaryColorInput}
+            onToggleCustomizeToolbar={() => setShowCustomizeToolbar((previous) => !previous)}
+            onToggleSidebar={() => setSidebarEnabled((previous) => !previous)}
+          />
         ) : (
-          <ScrollView contentContainerStyle={styles.content}>
-            {activeTab === "TREE" ? <TreePanel graph={graph} /> : null}
-
-            {activeTab === "MEMBERS" ? (
-              <MembersPanel
-                persons={graph.persons}
-                isMutating={isMutating}
-                onCreate={createPerson}
-                onUpdate={updatePerson}
-                onDelete={deletePerson}
-              />
+          <View style={[styles.workspace, sidebarEnabled && isWideLayout && styles.workspaceWide]}>
+            {sidebarEnabled ? (
+              <View
+                style={[
+                  styles.sidebar,
+                  !isWideLayout && styles.sidebarStacked,
+                  { backgroundColor: uiTheme.secondaryColor, borderColor: uiTheme.primaryColor },
+                ]}
+              >
+                <Text style={[styles.sidebarTitle, { color: uiTheme.primaryColor }]}>Sidebar</Text>
+                <Text style={styles.sidebarHint}>Quick navigation and summary</Text>
+                {tabs.map((tab) => (
+                  <Pressable
+                    key={`sidebar-${tab.key}`}
+                    style={[
+                      styles.sidebarNavButton,
+                      {
+                        borderColor: uiTheme.primaryColor,
+                        backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
+                      },
+                    ]}
+                    onPress={() => setActiveTab(tab.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.sidebarNavButtonText,
+                        { color: activeTab === tab.key ? uiTheme.textOnPrimary : uiTheme.primaryColor },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </Pressable>
+                ))}
+                <View style={styles.sidebarStatsBlock}>
+                  <Text style={styles.sidebarStatsText}>Members: {graph.persons.length}</Text>
+                  <Text style={styles.sidebarStatsText}>Parent Links: {graph.parentChildRelations.length}</Text>
+                  <Text style={styles.sidebarStatsText}>Spouse Links: {graph.spouseRelations.length}</Text>
+                </View>
+              </View>
             ) : null}
 
-            {activeTab === "RELATIONSHIPS" ? (
-              <RelationshipsPanel
-                graph={graph}
-                isMutating={isMutating}
-                onCreateParentChild={createParentChild}
-                onDeleteParentChild={deleteParentChild}
-                onCreateSpouse={createSpouse}
-                onDeleteSpouse={deleteSpouse}
-              />
-            ) : null}
-          </ScrollView>
+            <View style={styles.mainWorkspace}>
+              {showCustomizeToolbar ? (
+                <View style={[styles.customizeToolbar, { borderColor: uiTheme.panelBorderColor }]}>
+                  <Text style={[styles.customizeToolbarTitle, { color: uiTheme.primaryColor }]}>Customize Toolbar</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbarThemesRow}>
+                    {themePresets.map((preset) => (
+                      <Pressable
+                        key={`preset-${preset.id}`}
+                        style={[
+                          styles.toolbarThemeChip,
+                          {
+                            borderColor: uiTheme.primaryColor,
+                            backgroundColor: selectedThemeId === preset.id ? uiTheme.primaryColor : uiTheme.surfaceColor,
+                          },
+                        ]}
+                        onPress={() => applyThemePreset(preset.id)}
+                      >
+                        <Text
+                          style={[
+                            styles.toolbarThemeChipText,
+                            { color: selectedThemeId === preset.id ? uiTheme.textOnPrimary : uiTheme.primaryColor },
+                          ]}
+                        >
+                          {preset.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  <View style={styles.toolbarActionsRow}>
+                    <Pressable
+                      style={[styles.toolbarActionButton, { backgroundColor: uiTheme.primaryColor }]}
+                      onPress={() => setSidebarEnabled((previous) => !previous)}
+                    >
+                      <Text style={styles.toolbarActionButtonText}>
+                        {sidebarEnabled ? "Hide Sidebar" : "Show Sidebar"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.toolbarActionButton,
+                        { backgroundColor: uiTheme.surfaceColor, borderColor: uiTheme.primaryColor, borderWidth: 1 },
+                      ]}
+                      onPress={() => setActivePage("SETTINGS")}
+                    >
+                      <Text style={[styles.toolbarActionButtonText, { color: uiTheme.primaryColor }]}>More Settings</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.tabRow}>
+                {tabs.map((tab) => (
+                  <Pressable
+                    key={tab.key}
+                    style={[
+                      styles.tabButton,
+                      { backgroundColor: uiTheme.secondaryColor },
+                      activeTab === tab.key && { backgroundColor: uiTheme.primaryColor, borderColor: uiTheme.primaryColor },
+                    ]}
+                    onPress={() => setActiveTab(tab.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.tabText,
+                        { color: uiTheme.primaryColor },
+                        activeTab === tab.key && { color: uiTheme.textOnPrimary },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </Pressable>
+                ))}
+                <Pressable style={[styles.refreshButton, { backgroundColor: uiTheme.primaryColor }]} onPress={() => void reload()}>
+                  <Text style={styles.refreshButtonText}>Refresh</Text>
+                </Pressable>
+              </View>
+
+              {error ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              {isLoading ? (
+                <View style={styles.centered}>
+                  <ActivityIndicator size="large" color={uiTheme.primaryColor} />
+                  <Text style={styles.mutedText}>Loading family graph...</Text>
+                </View>
+              ) : (
+                <ScrollView contentContainerStyle={styles.content}>
+                  {activeTab === "TREE" ? (
+                    <TreePanel graph={graph} primaryColor={uiTheme.primaryColor} secondaryColor={uiTheme.secondaryColor} />
+                  ) : null}
+
+                  {activeTab === "MEMBERS" ? (
+                    <MembersPanel
+                      persons={graph.persons}
+                      isMutating={isMutating}
+                      primaryColor={uiTheme.primaryColor}
+                      secondaryColor={uiTheme.secondaryColor}
+                      onCreate={createPerson}
+                      onUpdate={updatePerson}
+                      onDelete={deletePerson}
+                    />
+                  ) : null}
+
+                  {activeTab === "RELATIONSHIPS" ? (
+                    <RelationshipsPanel
+                      graph={graph}
+                      isMutating={isMutating}
+                      primaryColor={uiTheme.primaryColor}
+                      secondaryColor={uiTheme.secondaryColor}
+                      onCreateParentChild={createParentChild}
+                      onDeleteParentChild={deleteParentChild}
+                      onCreateSpouse={createSpouse}
+                      onDeleteSpouse={deleteSpouse}
+                    />
+                  ) : null}
+                </ScrollView>
+              )}
+            </View>
+          </View>
         )}
       </View>
     </SafeAreaView>
   );
 };
 
+type SettingsPageProps = {
+  selectedThemeId: ThemePresetId;
+  primaryColorInput: string;
+  secondaryColorInput: string;
+  showCustomizeToolbar: boolean;
+  sidebarEnabled: boolean;
+  resolvedPrimaryColor: string;
+  resolvedSecondaryColor: string;
+  onPresetSelect: (presetId: ThemePresetId) => void;
+  onPrimaryColorChange: (value: string) => void;
+  onSecondaryColorChange: (value: string) => void;
+  onToggleCustomizeToolbar: () => void;
+  onToggleSidebar: () => void;
+};
+
+const SettingsPage = ({
+  selectedThemeId,
+  primaryColorInput,
+  secondaryColorInput,
+  showCustomizeToolbar,
+  sidebarEnabled,
+  resolvedPrimaryColor,
+  resolvedSecondaryColor,
+  onPresetSelect,
+  onPrimaryColorChange,
+  onSecondaryColorChange,
+  onToggleCustomizeToolbar,
+  onToggleSidebar,
+}: SettingsPageProps) => (
+  <ScrollView contentContainerStyle={styles.content}>
+    <View style={styles.panel}>
+      <Text style={styles.panelTitle}>Settings</Text>
+      <Text style={styles.panelHint}>
+        Select a theme, customize primary and secondary colors, and configure interface options.
+      </Text>
+
+      <Text style={styles.label}>Theme Preset</Text>
+      <View style={styles.optionRowWrap}>
+        {themePresets.map((preset) => {
+          const isSelected = selectedThemeId === preset.id;
+          return (
+            <Pressable
+              key={`settings-preset-${preset.id}`}
+              style={[
+                styles.optionButton,
+                isSelected && { backgroundColor: resolvedPrimaryColor, borderColor: resolvedPrimaryColor },
+              ]}
+              onPress={() => onPresetSelect(preset.id)}
+            >
+              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextActive]}>
+                {preset.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={styles.label}>Primary Color (#RGB or #RRGGBB)</Text>
+      <TextInput
+        value={primaryColorInput}
+        onChangeText={onPrimaryColorChange}
+        style={styles.input}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="#2e5f4f"
+      />
+      {!isHexColor(primaryColorInput) ? (
+        <Text style={styles.invalidHint}>Invalid color format. Use values like #123abc.</Text>
+      ) : null}
+
+      <Text style={styles.label}>Secondary Color (#RGB or #RRGGBB)</Text>
+      <TextInput
+        value={secondaryColorInput}
+        onChangeText={onSecondaryColorChange}
+        style={styles.input}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="#d9e6de"
+      />
+      {!isHexColor(secondaryColorInput) ? (
+        <Text style={styles.invalidHint}>Invalid color format. Use values like #def0ab.</Text>
+      ) : null}
+
+      <View style={styles.settingsSwatchRow}>
+        <View style={[styles.settingsSwatch, { backgroundColor: resolvedPrimaryColor }]} />
+        <Text style={styles.settingsSwatchText}>Applied primary: {resolvedPrimaryColor}</Text>
+      </View>
+      <View style={styles.settingsSwatchRow}>
+        <View style={[styles.settingsSwatch, { backgroundColor: resolvedSecondaryColor }]} />
+        <Text style={styles.settingsSwatchText}>Applied secondary: {resolvedSecondaryColor}</Text>
+      </View>
+
+      <Text style={styles.subsectionTitle}>Layout Options</Text>
+      <SettingsToggle
+        label="Show Customize Toolbar"
+        value={showCustomizeToolbar}
+        accentColor={resolvedPrimaryColor}
+        onPress={onToggleCustomizeToolbar}
+      />
+      <SettingsToggle
+        label="Enable Sidebar"
+        value={sidebarEnabled}
+        accentColor={resolvedPrimaryColor}
+        onPress={onToggleSidebar}
+      />
+    </View>
+  </ScrollView>
+);
+
+type SettingsToggleProps = {
+  label: string;
+  value: boolean;
+  accentColor: string;
+  onPress: () => void;
+};
+
+const SettingsToggle = ({ label, value, accentColor, onPress }: SettingsToggleProps) => (
+  <Pressable
+    style={[styles.settingsToggleRow, { borderColor: accentColor }, value && { backgroundColor: `${accentColor}22` }]}
+    onPress={onPress}
+  >
+    <Text style={styles.settingsToggleLabel}>{label}</Text>
+    <View
+      style={[
+        styles.settingsToggleValuePill,
+        { borderColor: accentColor },
+        value && { backgroundColor: accentColor, borderColor: accentColor },
+      ]}
+    >
+      <Text style={[styles.settingsToggleValueText, value && { color: "#ffffff" }]}>{value ? "ON" : "OFF"}</Text>
+    </View>
+  </Pressable>
+);
+
 type MembersPanelProps = {
   persons: Person[];
   isMutating: boolean;
+  primaryColor: string;
+  secondaryColor: string;
   onCreate: (payload: PersonInput) => Promise<void>;
   onUpdate: (personId: string, payload: PersonInput) => Promise<void>;
   onDelete: (personId: string) => Promise<void>;
 };
 
-const MembersPanel = ({ persons, isMutating, onCreate, onUpdate, onDelete }: MembersPanelProps) => {
+const MembersPanel = ({
+  persons,
+  isMutating,
+  primaryColor,
+  secondaryColor,
+  onCreate,
+  onUpdate,
+  onDelete,
+}: MembersPanelProps) => {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [formState, setFormState] = useState<PersonFormState>(defaultFormState);
 
@@ -230,17 +608,36 @@ const MembersPanel = ({ persons, isMutating, onCreate, onUpdate, onDelete }: Mem
 
       <Text style={styles.label}>Select Existing Member</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
-        <Pressable style={[styles.selectorPill, !selectedPersonId && styles.selectorPillActive]} onPress={() => selectPerson(null)}>
-          <Text style={[styles.selectorPillText, !selectedPersonId && styles.selectorPillTextActive]}>New Member</Text>
+        <Pressable
+          style={[
+            styles.selectorPill,
+            { borderColor: primaryColor },
+            !selectedPersonId && { backgroundColor: primaryColor, borderColor: primaryColor },
+          ]}
+          onPress={() => selectPerson(null)}
+        >
+          <Text style={[styles.selectorPillText, { color: primaryColor }, !selectedPersonId && styles.selectorPillTextActive]}>
+            New Member
+          </Text>
         </Pressable>
 
         {sortedPersons.map((person) => (
           <Pressable
             key={person.id}
-            style={[styles.selectorPill, selectedPersonId === person.id && styles.selectorPillActive]}
+            style={[
+              styles.selectorPill,
+              { borderColor: primaryColor },
+              selectedPersonId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
+            ]}
             onPress={() => selectPerson(person)}
           >
-            <Text style={[styles.selectorPillText, selectedPersonId === person.id && styles.selectorPillTextActive]}>
+            <Text
+              style={[
+                styles.selectorPillText,
+                { color: primaryColor },
+                selectedPersonId === person.id && styles.selectorPillTextActive,
+              ]}
+            >
               {displayName(person)}
             </Text>
           </Pressable>
@@ -272,10 +669,16 @@ const MembersPanel = ({ persons, isMutating, onCreate, onUpdate, onDelete }: Mem
           return (
             <Pressable
               key={label}
-              style={[styles.optionButton, isSelected && styles.optionButtonActive]}
+              style={[
+                styles.optionButton,
+                { borderColor: primaryColor, backgroundColor: secondaryColor },
+                isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
+              ]}
               onPress={() => setFormState((prev) => ({ ...prev, gender: option }))}
             >
-              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextActive]}>{label}</Text>
+              <Text style={[styles.optionButtonText, { color: primaryColor }, isSelected && styles.optionButtonTextActive]}>
+                {label}
+              </Text>
             </Pressable>
           );
         })}
@@ -316,7 +719,7 @@ const MembersPanel = ({ persons, isMutating, onCreate, onUpdate, onDelete }: Mem
       />
 
       <View style={styles.actionRow}>
-        <Pressable style={styles.primaryButton} onPress={() => void save()} disabled={isMutating}>
+        <Pressable style={[styles.primaryButton, { backgroundColor: primaryColor }]} onPress={() => void save()} disabled={isMutating}>
           <Text style={styles.primaryButtonText}>{selectedPerson ? "Update Member" : "Add Member"}</Text>
         </Pressable>
 
@@ -333,6 +736,8 @@ const MembersPanel = ({ persons, isMutating, onCreate, onUpdate, onDelete }: Mem
 type RelationshipsPanelProps = {
   graph: FamilyGraph;
   isMutating: boolean;
+  primaryColor: string;
+  secondaryColor: string;
   onCreateParentChild: (payload: { parentId: string; childId: string; relationType: ParentType }) => Promise<void>;
   onDeleteParentChild: (parentId: string, childId: string) => Promise<void>;
   onCreateSpouse: (payload: {
@@ -347,6 +752,8 @@ type RelationshipsPanelProps = {
 const RelationshipsPanel = ({
   graph,
   isMutating,
+  primaryColor,
+  secondaryColor,
   onCreateParentChild,
   onDeleteParentChild,
   onCreateSpouse,
@@ -413,27 +820,51 @@ const RelationshipsPanel = ({
 
       <Text style={styles.subsectionTitle}>Parent to Child</Text>
       <Text style={styles.label}>Parent</Text>
-      <HorizontalPersonSelector persons={persons} selectedId={parentId} onSelect={setParentId} />
+      <HorizontalPersonSelector
+        persons={persons}
+        selectedId={parentId}
+        onSelect={setParentId}
+        primaryColor={primaryColor}
+      />
 
       <Text style={styles.label}>Child</Text>
-      <HorizontalPersonSelector persons={persons} selectedId={childId} onSelect={setChildId} />
+      <HorizontalPersonSelector
+        persons={persons}
+        selectedId={childId}
+        onSelect={setChildId}
+        primaryColor={primaryColor}
+      />
 
       <Text style={styles.label}>Relationship Type</Text>
       <View style={styles.optionRowWrap}>
         {parentTypeOptions.map((option) => (
           <Pressable
             key={option}
-            style={[styles.optionButton, relationType === option && styles.optionButtonActive]}
+            style={[
+              styles.optionButton,
+              { borderColor: primaryColor, backgroundColor: secondaryColor },
+              relationType === option && { backgroundColor: primaryColor, borderColor: primaryColor },
+            ]}
             onPress={() => setRelationType(option)}
           >
-            <Text style={[styles.optionButtonText, relationType === option && styles.optionButtonTextActive]}>
+            <Text
+              style={[
+                styles.optionButtonText,
+                { color: primaryColor },
+                relationType === option && styles.optionButtonTextActive,
+              ]}
+            >
               {option}
             </Text>
           </Pressable>
         ))}
       </View>
 
-      <Pressable style={styles.primaryButton} onPress={() => void createParentChildLink()} disabled={isMutating}>
+      <Pressable
+        style={[styles.primaryButton, { backgroundColor: primaryColor }]}
+        onPress={() => void createParentChildLink()}
+        disabled={isMutating}
+      >
         <Text style={styles.primaryButtonText}>Add Parent-Child Link</Text>
       </Pressable>
 
@@ -469,10 +900,20 @@ const RelationshipsPanel = ({
 
       <Text style={styles.subsectionTitle}>Spouses</Text>
       <Text style={styles.label}>Person A</Text>
-      <HorizontalPersonSelector persons={persons} selectedId={spouseAId} onSelect={setSpouseAId} />
+      <HorizontalPersonSelector
+        persons={persons}
+        selectedId={spouseAId}
+        onSelect={setSpouseAId}
+        primaryColor={primaryColor}
+      />
 
       <Text style={styles.label}>Person B</Text>
-      <HorizontalPersonSelector persons={persons} selectedId={spouseBId} onSelect={setSpouseBId} />
+      <HorizontalPersonSelector
+        persons={persons}
+        selectedId={spouseBId}
+        onSelect={setSpouseBId}
+        primaryColor={primaryColor}
+      />
 
       <Text style={styles.label}>Married At (optional)</Text>
       <TextInput
@@ -490,7 +931,11 @@ const RelationshipsPanel = ({
         placeholder="YYYY-MM-DD"
       />
 
-      <Pressable style={styles.primaryButton} onPress={() => void createSpouseLink()} disabled={isMutating}>
+      <Pressable
+        style={[styles.primaryButton, { backgroundColor: primaryColor }]}
+        onPress={() => void createSpouseLink()}
+        disabled={isMutating}
+      >
         <Text style={styles.primaryButtonText}>Add Spouse Link</Text>
       </Pressable>
 
@@ -529,17 +974,28 @@ type HorizontalPersonSelectorProps = {
   persons: Person[];
   selectedId: string;
   onSelect: (personId: string) => void;
+  primaryColor: string;
 };
 
-const HorizontalPersonSelector = ({ persons, selectedId, onSelect }: HorizontalPersonSelectorProps) => (
+const HorizontalPersonSelector = ({ persons, selectedId, onSelect, primaryColor }: HorizontalPersonSelectorProps) => (
   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
     {persons.map((person) => (
       <Pressable
         key={person.id}
-        style={[styles.selectorPill, selectedId === person.id && styles.selectorPillActive]}
+        style={[
+          styles.selectorPill,
+          { borderColor: primaryColor },
+          selectedId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
+        ]}
         onPress={() => onSelect(person.id)}
       >
-        <Text style={[styles.selectorPillText, selectedId === person.id && styles.selectorPillTextActive]}>
+        <Text
+          style={[
+            styles.selectorPillText,
+            { color: primaryColor },
+            selectedId === person.id && styles.selectorPillTextActive,
+          ]}
+        >
           {displayName(person)}
         </Text>
       </Pressable>
@@ -549,6 +1005,8 @@ const HorizontalPersonSelector = ({ persons, selectedId, onSelect }: HorizontalP
 
 type TreePanelProps = {
   graph: FamilyGraph;
+  primaryColor: string;
+  secondaryColor: string;
 };
 
 type TreeRenderNode = {
@@ -575,7 +1033,7 @@ const orderNodeByName = (
     : { personId: secondId, partnerId: firstId };
 };
 
-const TreePanel = ({ graph }: TreePanelProps) => {
+const TreePanel = ({ graph, primaryColor, secondaryColor }: TreePanelProps) => {
   const personById = useMemo(() => {
     const map = new Map<string, Person>();
     graph.persons.forEach((person) => map.set(person.id, person));
@@ -705,11 +1163,14 @@ const TreePanel = ({ graph }: TreePanelProps) => {
       <Text style={styles.panelTitle}>Family Tree</Text>
       <Text style={styles.panelHint}>Tap a branch card to expand/collapse descendants.</Text>
       <View style={styles.treePanelActions}>
-        <Pressable style={styles.treeMiniButton} onPress={expandAll}>
-          <Text style={styles.treeMiniButtonText}>Expand all</Text>
+        <Pressable style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }]} onPress={expandAll}>
+          <Text style={[styles.treeMiniButtonText, { color: primaryColor }]}>Expand all</Text>
         </Pressable>
-        <Pressable style={styles.treeMiniButton} onPress={collapseAll}>
-          <Text style={styles.treeMiniButtonText}>Collapse all</Text>
+        <Pressable
+          style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }]}
+          onPress={collapseAll}
+        >
+          <Text style={[styles.treeMiniButtonText, { color: primaryColor }]}>Collapse all</Text>
         </Pressable>
       </View>
 
@@ -728,6 +1189,8 @@ const TreePanel = ({ graph }: TreePanelProps) => {
             spouseByPerson={spouseByPerson}
             spouseIdsByPerson={spouseIdsByPerson}
             collapsedNodeIds={collapsedNodeIds}
+            primaryColor={primaryColor}
+            secondaryColor={secondaryColor}
             onToggle={toggleNode}
           />
         ))
@@ -746,6 +1209,8 @@ type TreeNodeProps = {
   spouseByPerson: Map<string, SpouseRelation[]>;
   spouseIdsByPerson: Map<string, string[]>;
   collapsedNodeIds: Set<string>;
+  primaryColor: string;
+  secondaryColor: string;
   onToggle: (personId: string, partnerId?: string) => void;
 };
 
@@ -759,6 +1224,8 @@ const TreeNode = ({
   spouseByPerson,
   spouseIdsByPerson,
   collapsedNodeIds,
+  primaryColor,
+  secondaryColor,
   onToggle,
 }: TreeNodeProps) => {
   const person = personById.get(personId);
@@ -839,13 +1306,17 @@ const TreeNode = ({
   return (
     <View style={[styles.treeNode, { marginLeft: depth * 14 }]}>
       <Pressable
-        style={[styles.treeCard, hasChildren && styles.treeCardBranch]}
+        style={[
+          styles.treeCard,
+          hasChildren && styles.treeCardBranch,
+          { borderColor: primaryColor, backgroundColor: secondaryColor },
+        ]}
         onPress={hasChildren ? () => onToggle(personId, partnerId) : undefined}
       >
         <View style={styles.treeTitleRow}>
-          <Text style={styles.treeBranchLabel}>{partner ? "Parent Pair" : "Member"}</Text>
+          <Text style={[styles.treeBranchLabel, { color: primaryColor }]}>{partner ? "Parent Pair" : "Member"}</Text>
           {hasChildren ? (
-            <Text style={styles.treeToggle}>
+            <Text style={[styles.treeToggle, { backgroundColor: primaryColor }]}>
               {isCollapsed ? `+ ${childRenderNodes.length}` : `- ${childRenderNodes.length}`}
             </Text>
           ) : null}
@@ -853,22 +1324,22 @@ const TreeNode = ({
 
         {partner ? (
           <View style={styles.treePairRow}>
-            <View style={styles.treePersonTile}>
+            <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
               <Text style={styles.treeName}>{displayName(person)}</Text>
               {person.gender ? <Text style={styles.treeMeta}>Gender: {person.gender}</Text> : null}
               {person.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(person.dateOfBirth)}</Text> : null}
             </View>
 
-            <View style={styles.treePairConnector} />
+            <View style={[styles.treePairConnector, { borderTopColor: primaryColor }]} />
 
-            <View style={styles.treePersonTile}>
+            <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
               <Text style={styles.treeName}>{displayName(partner)}</Text>
               {partner.gender ? <Text style={styles.treeMeta}>Gender: {partner.gender}</Text> : null}
               {partner.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(partner.dateOfBirth)}</Text> : null}
             </View>
           </View>
         ) : (
-          <View style={styles.treePersonTile}>
+          <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
             <Text style={styles.treeName}>{displayName(person)}</Text>
             {person.gender ? <Text style={styles.treeMeta}>Gender: {person.gender}</Text> : null}
             {person.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(person.dateOfBirth)}</Text> : null}
@@ -878,10 +1349,10 @@ const TreeNode = ({
       </Pressable>
 
       {isExpanded ? (
-        <View style={styles.treeChildrenBlock}>
+        <View style={[styles.treeChildrenBlock, { borderLeftColor: primaryColor }]}>
           {childRenderNodes.map((childNode, index) => (
             <View key={`${personId}-${partnerId ?? "none"}-${childNode.personId}-${childNode.partnerId ?? "none"}`} style={styles.treeChildItem}>
-              <View style={styles.treeChildConnector} />
+              <View style={[styles.treeChildConnector, { borderTopColor: primaryColor }]} />
               {index === childRenderNodes.length - 1 ? <View style={styles.treeChildTailMask} /> : null}
               <TreeNode
                 personId={childNode.personId}
@@ -893,6 +1364,8 @@ const TreeNode = ({
                 spouseByPerson={spouseByPerson}
                 spouseIdsByPerson={spouseIdsByPerson}
                 collapsedNodeIds={collapsedNodeIds}
+                primaryColor={primaryColor}
+                secondaryColor={secondaryColor}
                 onToggle={onToggle}
               />
             </View>
@@ -913,9 +1386,116 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   header: {
+    flex: 1,
     marginTop: 8,
     marginBottom: 16,
+  },
+  settingsIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  workspace: {
+    flex: 1,
+  },
+  workspaceWide: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  sidebar: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    minWidth: 210,
+  },
+  sidebarStacked: {
+    width: "100%",
+  },
+  sidebarTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  sidebarHint: {
+    color: "#45695d",
+    marginTop: 4,
+    marginBottom: 8,
+    fontSize: 12,
+  },
+  sidebarNavButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  sidebarNavButtonText: {
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  sidebarStatsBlock: {
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#b7cdc2",
+    paddingTop: 8,
+    gap: 4,
+  },
+  sidebarStatsText: {
+    color: "#1d3f34",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  mainWorkspace: {
+    flex: 1,
+  },
+  customizeToolbar: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+    backgroundColor: "#ffffff",
+  },
+  customizeToolbarTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  toolbarThemesRow: {
+    marginBottom: 8,
+  },
+  toolbarThemeChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginRight: 8,
+  },
+  toolbarThemeChipText: {
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  toolbarActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  toolbarActionButton: {
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  toolbarActionButtonText: {
+    color: "#ffffff",
+    fontWeight: "700",
+    fontSize: 12,
   },
   title: {
     fontSize: 28,
@@ -937,6 +1517,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#2e5f4f",
     backgroundColor: "#d9e6de",
   },
   tabButtonActive: {
@@ -1023,6 +1605,60 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     marginBottom: 10,
     backgroundColor: "#ffffff",
+  },
+  invalidHint: {
+    color: "#b43a3a",
+    marginTop: -6,
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  settingsSwatchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  settingsSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#8fa49a",
+  },
+  settingsSwatchText: {
+    color: "#2f4f43",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  settingsToggleRow: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
+  },
+  settingsToggleLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1f4b3d",
+  },
+  settingsToggleValuePill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    minWidth: 52,
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+  },
+  settingsToggleValueText: {
+    fontWeight: "700",
+    fontSize: 12,
+    color: "#2e5f4f",
   },
   multilineInput: {
     minHeight: 80,
@@ -1188,8 +1824,8 @@ const styles = StyleSheet.create({
   treeToggle: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#2e5f4f",
-    backgroundColor: "#e5f1eb",
+    color: "#ffffff",
+    backgroundColor: "#2e5f4f",
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
