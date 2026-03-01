@@ -1943,6 +1943,21 @@ const TreePanel = ({
   }, [rootNodes, familyNameByPersonId, personById]);
 
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(new Set());
+  const [collapsedFamilySections, setCollapsedFamilySections] = useState<Set<string>>(new Set());
+  const parentIdsWithChildren = useMemo(
+    () => new Set(graph.parentChildRelations.map((relation) => relation.parentId)),
+    [graph.parentChildRelations],
+  );
+  const collapsibleBranchCount = parentIdsWithChildren.size;
+  const collapsedBranchCount = useMemo(
+    () => Array.from(parentIdsWithChildren).filter((parentId) => collapsedNodeIds.has(parentId)).length,
+    [parentIdsWithChildren, collapsedNodeIds],
+  );
+  const isFullyCollapsed = collapsibleBranchCount > 0 && collapsedBranchCount === collapsibleBranchCount;
+  const familySectionCount = rootNodesByFamily.length;
+  const collapsedFamilyCount = collapsedFamilySections.size;
+  const areAllFamilySectionsCollapsed =
+    familySectionCount > 0 && collapsedFamilyCount === familySectionCount;
 
   const toggleNode = (personId: string, partnerId?: string) => {
     setCollapsedNodeIds((previous) => {
@@ -1966,9 +1981,43 @@ const TreePanel = ({
 
   const expandAll = () => setCollapsedNodeIds(new Set());
 
-  const collapseAll = () => {
-    const parentsWithChildren = new Set(graph.parentChildRelations.map((relation) => relation.parentId));
-    setCollapsedNodeIds(parentsWithChildren);
+  const collapseAll = () => setCollapsedNodeIds(new Set(parentIdsWithChildren));
+
+  const toggleFamilySection = (familyName: string) => {
+    setCollapsedFamilySections((previous) => {
+      const next = new Set(previous);
+      if (next.has(familyName)) {
+        next.delete(familyName);
+      } else {
+        next.add(familyName);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const familyNames = new Set(rootNodesByFamily.map((familyGroup) => familyGroup.familyName));
+    setCollapsedFamilySections((previous) => {
+      const next = new Set<string>();
+      previous.forEach((name) => {
+        if (familyNames.has(name)) {
+          next.add(name);
+        }
+      });
+      return next;
+    });
+  }, [rootNodesByFamily]);
+
+  const shouldCollapseAll = !isFullyCollapsed || !areAllFamilySectionsCollapsed;
+  const handleToggleAllBranches = () => {
+    if (shouldCollapseAll) {
+      collapseAll();
+      setCollapsedFamilySections(new Set(rootNodesByFamily.map((familyGroup) => familyGroup.familyName)));
+      return;
+    }
+
+    expandAll();
+    setCollapsedFamilySections(new Set());
   };
 
   return (
@@ -1984,16 +2033,34 @@ const TreePanel = ({
       </View>
       <View style={styles.treePanelActions}>
         <Pressable
-          style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }, styles.shadowSoft]}
-          onPress={expandAll}
+          style={[
+            styles.treeActionButton,
+            {
+              borderColor: primaryColor,
+              backgroundColor: shouldCollapseAll ? primaryColor : secondaryColor,
+            },
+            styles.shadowStrong,
+          ]}
+          onPress={handleToggleAllBranches}
         >
-          <Text style={[styles.treeMiniButtonText, { color: primaryColor }]}>Expand all</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }, styles.shadowSoft]}
-          onPress={collapseAll}
-        >
-          <Text style={[styles.treeMiniButtonText, { color: primaryColor }]}>Collapse all</Text>
+          <View style={styles.treeActionHeaderRow}>
+            <Ionicons
+              name={shouldCollapseAll ? "remove-circle-outline" : "add-circle-outline"}
+              size={18}
+              color={shouldCollapseAll ? "#ffffff" : primaryColor}
+            />
+            <Text style={[styles.treeActionTitle, { color: shouldCollapseAll ? "#ffffff" : primaryColor }]}>
+              {shouldCollapseAll ? "Collapse All Sections" : "Expand All Sections"}
+            </Text>
+          </View>
+          <Text style={[styles.treeActionHint, { color: shouldCollapseAll ? "#e8f8f1" : "#3f6356" }]}>
+            {shouldCollapseAll
+              ? "Collapse all family sections and descendant branches."
+              : "Expand every family section and all descendant branches."}
+          </Text>
+          <Text style={[styles.treeActionMeta, { color: shouldCollapseAll ? "#ffffff" : primaryColor }]}>
+            {collapsedFamilyCount}/{familySectionCount} sections, {collapsedBranchCount}/{collapsibleBranchCount} branches collapsed
+          </Text>
         </Pressable>
       </View>
 
@@ -2005,8 +2072,24 @@ const TreePanel = ({
             key={`tree-family-${familyGroup.familyName}`}
             style={[styles.familyTreeGroupCard, { borderColor: primaryColor, backgroundColor: `${secondaryColor}66` }, styles.shadowSoft]}
           >
-            <Text style={[styles.familyTreeGroupTitle, { color: primaryColor }]}>{familyGroup.familyName} Family</Text>
-            {familyGroup.nodes.map((rootNode) => (
+            <Pressable
+              style={styles.familyTreeGroupHeader}
+              onPress={() => toggleFamilySection(familyGroup.familyName)}
+            >
+              <Text style={[styles.familyTreeGroupTitle, { color: primaryColor }]}>{familyGroup.familyName} Family</Text>
+              <View style={[styles.familyTreeGroupTogglePill, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
+                <Ionicons
+                  name={collapsedFamilySections.has(familyGroup.familyName) ? "chevron-down" : "chevron-up"}
+                  size={16}
+                  color={primaryColor}
+                />
+                <Text style={[styles.familyTreeGroupToggleText, { color: primaryColor }]}>
+                  {collapsedFamilySections.has(familyGroup.familyName) ? "Expand" : "Collapse"}
+                </Text>
+              </View>
+            </Pressable>
+            {!collapsedFamilySections.has(familyGroup.familyName)
+              ? familyGroup.nodes.map((rootNode) => (
               <TreeNode
                 key={`${familyGroup.familyName}-${rootNode.personId}-${rootNode.partnerId ?? "single"}`}
                 personId={rootNode.personId}
@@ -2024,7 +2107,8 @@ const TreePanel = ({
                 showMemberPhotos={showMemberPhotos}
                 onToggle={toggleNode}
               />
-            ))}
+                ))
+              : null}
           </View>
         ))
       )}
@@ -2795,8 +2879,32 @@ const styles = StyleSheet.create({
   },
   treePanelActions: {
     flexDirection: "row",
-    gap: 8,
     marginBottom: 12,
+  },
+  treeActionButton: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  treeActionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  treeActionTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  treeActionHint: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  treeActionMeta: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   familyTreeGroupCard: {
     borderWidth: 1,
@@ -2804,10 +2912,30 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
+  familyTreeGroupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 8,
+  },
   familyTreeGroupTitle: {
     fontSize: 15,
     fontWeight: "800",
-    marginBottom: 8,
+    flex: 1,
+  },
+  familyTreeGroupTogglePill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  familyTreeGroupToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   treeMiniButton: {
     paddingVertical: 6,
