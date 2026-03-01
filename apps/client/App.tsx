@@ -721,56 +721,6 @@ const App = () => {
             ) : null}
 
             <View style={styles.mainWorkspace}>
-              {!isSidebarMode ? (
-                <View style={[styles.customizeToolbar, { borderColor: uiTheme.panelBorderColor }, styles.shadowSoft]}>
-                  <Text style={[styles.customizeToolbarTitle, { color: uiTheme.primaryColor }]}>Customize Toolbar</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbarThemesRow}>
-                    {themePresets.map((preset) => (
-                      <Pressable
-                        key={`preset-${preset.id}`}
-                        style={[
-                          styles.toolbarThemeChip,
-                          {
-                            borderColor: uiTheme.primaryColor,
-                            backgroundColor: selectedThemeId === preset.id ? uiTheme.primaryColor : uiTheme.surfaceColor,
-                          },
-                          styles.shadowSoft,
-                        ]}
-                        onPress={() => applyThemePreset(preset.id)}
-                      >
-                        <Text
-                          style={[
-                            styles.toolbarThemeChipText,
-                            { color: selectedThemeId === preset.id ? uiTheme.textOnPrimary : uiTheme.primaryColor },
-                          ]}
-                        >
-                          {preset.label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                  <View style={styles.toolbarActionsRow}>
-                    <Pressable
-                      style={[styles.toolbarActionButton, { backgroundColor: uiTheme.primaryColor }]}
-                      onPress={() => setActivePage("SETTINGS")}
-                    >
-                      <Ionicons name="color-palette-outline" size={15} color={uiTheme.textOnPrimary} />
-                      <Text style={styles.toolbarActionButtonText}>Theme Settings</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.toolbarActionButton,
-                        { backgroundColor: uiTheme.surfaceColor, borderColor: uiTheme.primaryColor, borderWidth: 1 },
-                      ]}
-                      onPress={() => setActivePage("SETTINGS")}
-                    >
-                      <Ionicons name="settings-outline" size={15} color={uiTheme.primaryColor} />
-                      <Text style={[styles.toolbarActionButtonText, { color: uiTheme.primaryColor }]}>More Settings</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : null}
-
               <View style={styles.tabRow}>
                 {showTopTabButtons
                   ? tabs.map((tab) => (
