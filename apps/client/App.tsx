@@ -2214,11 +2214,19 @@ type MemberPhotoProps = {
   person: Person;
   primaryColor: string;
   size?: number;
+  showPhoto?: boolean;
 };
 
-const MemberPhoto = ({ person, primaryColor, size = 44 }: MemberPhotoProps) => {
+const initialsFromPerson = (person: Person) => {
+  const first = person.firstName.trim().charAt(0).toUpperCase();
+  const last = person.lastName.trim().charAt(0).toUpperCase();
+  const initials = `${first}${last}`.trim();
+  return initials || "M";
+};
+
+const MemberPhoto = ({ person, primaryColor, size = 44, showPhoto = true }: MemberPhotoProps) => {
   const photoUrl = person.photoUrl?.trim();
-  const hasPhoto = Boolean(photoUrl);
+  const hasPhoto = Boolean(photoUrl) && showPhoto;
 
   if (hasPhoto) {
     return (
@@ -2249,7 +2257,9 @@ const MemberPhoto = ({ person, primaryColor, size = 44 }: MemberPhotoProps) => {
         },
       ]}
     >
-      <Ionicons name="person-outline" size={Math.max(16, size * 0.45)} color={primaryColor} />
+      <Text style={[styles.memberPhotoInitials, { color: primaryColor, fontSize: Math.max(12, Math.floor(size * 0.35)) }]}>
+        {initialsFromPerson(person)}
+      </Text>
     </View>
   );
 };
@@ -2260,6 +2270,8 @@ type TreePersonCardProps = {
   showMemberPhotos: boolean;
   familyName: string;
   viewMode: SectionViewMode;
+  cardWidth: number;
+  cardHeight: number;
   spouseNames?: string[];
 };
 
@@ -2269,31 +2281,61 @@ const TreePersonCard = ({
   showMemberPhotos,
   familyName,
   viewMode,
+  cardWidth,
+  cardHeight,
   spouseNames = [],
 }: TreePersonCardProps) => {
-  const { width: screenWidth } = useWindowDimensions();
-  const portraitCardWidth = useMemo(() => clamp(Math.round(screenWidth * 0.26), 96, 124), [screenWidth]);
-  const portraitCardHeight = useMemo(() => Math.round(portraitCardWidth * 1.42), [portraitCardWidth]);
+  const avatarSize = viewMode === "TILE" ? 68 : 56;
+  const spouseSummary = spouseNames.slice(0, 2).join(", ");
+  const hasSpouseSummary = spouseSummary.trim().length > 0;
+  const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
+  const lifeLabel = person.dateOfBirth
+    ? `Born ${formatDate(person.dateOfBirth)}`
+    : "Birth date not set";
+  const isDeceased = Boolean(person.dateOfDeath);
 
   return (
     <View
       style={[
         styles.treePersonTile,
         viewMode === "TILE" && styles.treePersonTilePortrait,
-        viewMode === "TILE" && { width: portraitCardWidth, minHeight: portraitCardHeight },
+        { width: cardWidth, minHeight: cardHeight },
         { borderColor: primaryColor, backgroundColor: "#ffffff" },
         styles.shadowSoft,
       ]}
     >
-      <View style={styles.treePersonHeaderRow}>
-        {showMemberPhotos ? <MemberPhoto person={person} primaryColor={primaryColor} /> : null}
-        <View style={styles.treePersonDetailColumn}>
-          <Text style={styles.treeName}>{displayName(person)}</Text>
-          <Text style={styles.treeMeta}>Family: {familyName}</Text>
-          {person.gender ? <Text style={styles.treeMeta}>Gender: {person.gender}</Text> : null}
-          {person.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(person.dateOfBirth)}</Text> : null}
-          {spouseNames.length > 0 ? <Text style={styles.treeMeta}>Spouse(s): {spouseNames.join(", ")}</Text> : null}
+      <View style={[styles.treePersonAvatarWrap, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
+        <MemberPhoto person={person} primaryColor={primaryColor} size={avatarSize} showPhoto={showMemberPhotos} />
+      </View>
+      <View style={styles.treePersonDetailColumn}>
+        <Text style={styles.treeName} numberOfLines={2}>
+          {displayName(person)}
+        </Text>
+        <Text style={styles.treeMeta} numberOfLines={1}>
+          {familyName} Family
+        </Text>
+        <View style={styles.treeInfoPill}>
+          <Text style={styles.treeInfoPillText} numberOfLines={1}>
+            {genderLabel}
+          </Text>
         </View>
+        <View style={styles.treeInfoPill}>
+          <Text style={styles.treeInfoPillText} numberOfLines={1}>
+            {lifeLabel}
+          </Text>
+        </View>
+        {isDeceased ? (
+          <View style={styles.treeStatusBadge}>
+            <Text style={styles.treeStatusBadgeText}>RIP</Text>
+          </View>
+        ) : null}
+        {hasSpouseSummary ? (
+          <View style={styles.treeInfoPill}>
+            <Text style={styles.treeInfoPillText} numberOfLines={2}>
+              Partner: {spouseSummary}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -2319,7 +2361,33 @@ const TreePanel = ({
     graph.persons.forEach((person) => map.set(person.id, person));
     return map;
   }, [graph.persons]);
-  const listTreeFamilyCardWidth = useMemo(() => clamp(screenWidth - 96, 280, 560), [screenWidth]);
+  const familySectionWidth = useMemo(
+    () => (viewMode === "LIST" ? clamp(screenWidth - 96, 300, 720) : clamp(screenWidth - 44, 320, 1200)),
+    [screenWidth, viewMode],
+  );
+  const memberCardsPerRow = useMemo(() => {
+    if (familySectionWidth < 430) {
+      return 1;
+    }
+    if (familySectionWidth < 760) {
+      return 2;
+    }
+    if (familySectionWidth < 980) {
+      return 3;
+    }
+    if (familySectionWidth < 1180) {
+      return 4;
+    }
+    if (familySectionWidth >= 1180) {
+      return 5;
+    }
+    return 2;
+  }, [familySectionWidth]);
+  const memberCardWidth = useMemo(
+    () => clamp(Math.floor((familySectionWidth - 36 - (memberCardsPerRow - 1) * 12) / memberCardsPerRow), 170, 236),
+    [familySectionWidth, memberCardsPerRow],
+  );
+  const memberCardHeight = useMemo(() => Math.round(memberCardWidth * 1.32), [memberCardWidth]);
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -2583,7 +2651,7 @@ const TreePanel = ({
         style={[
           styles.familyTreeGroupCard,
           viewMode === "LIST" && styles.familyTreeGroupCardList,
-          viewMode === "LIST" && { width: listTreeFamilyCardWidth },
+          { width: familySectionWidth },
           { borderColor: primaryColor, backgroundColor: `${secondaryColor}66` },
           styles.shadowSoft,
         ]}
@@ -2640,6 +2708,8 @@ const TreePanel = ({
                 secondaryColor={secondaryColor}
                 showMemberPhotos={showMemberPhotos}
                 onToggle={toggleNode}
+                cardWidth={memberCardWidth}
+                cardHeight={memberCardHeight}
                 onRootFocusSelect={(personId, partnerId) =>
                   focusRootNodeForFamily(familyGroup.familyName, { personId, partnerId })
                 }
@@ -2652,7 +2722,7 @@ const TreePanel = ({
   });
 
   return (
-    <View style={[styles.panel, styles.shadowSoft]}>
+    <View style={[styles.panel, styles.treePanelCanvas, styles.shadowSoft]}>
       <View style={styles.panelHeaderRow}>
         <View style={styles.panelHeaderTextBlock}>
           <Text style={styles.panelTitle}>Family Tree</Text>
@@ -2735,6 +2805,8 @@ type TreeNodeProps = {
   secondaryColor: string;
   showMemberPhotos: boolean;
   onToggle: (personId: string, partnerId?: string) => void;
+  cardWidth: number;
+  cardHeight: number;
   onRootFocusSelect?: (personId: string, partnerId?: string) => void;
   isRootFocusSelectable?: boolean;
 };
@@ -2755,6 +2827,8 @@ const TreeNode = ({
   secondaryColor,
   showMemberPhotos,
   onToggle,
+  cardWidth,
+  cardHeight,
   onRootFocusSelect,
   isRootFocusSelectable = false,
 }: TreeNodeProps) => {
@@ -2814,25 +2888,18 @@ const TreeNode = ({
     renderedChildIds.add(child.id);
   });
 
-  const spouseNameSet = new Set<string>();
-  nodePersonIds.forEach((nodePersonId) => {
+  const membersForNode = partner ? [person, partner] : [person];
+  const resolveSpouseNamesForPerson = (nodePersonId: string) => {
+    const spouseNames = new Set<string>();
     (spouseByPerson.get(nodePersonId) ?? []).forEach((relation) => {
       const relationPartnerId = relation.personAId === nodePersonId ? relation.personBId : relation.personAId;
-      if (nodePersonIds.includes(relationPartnerId)) {
-        return;
-      }
       const relationPartner = personById.get(relationPartnerId);
       if (relationPartner) {
-        spouseNameSet.add(displayName(relationPartner));
+        spouseNames.add(displayName(relationPartner));
       }
     });
-  });
-
-  const spouseNames = Array.from(spouseNameSet).sort((a, b) => a.localeCompare(b));
-  const personFamilyName = familyNameByPersonId.get(personId) ?? familyNameFromLastName(person.lastName);
-  const partnerFamilyName = partner
-    ? familyNameByPersonId.get(partner.id) ?? familyNameFromLastName(partner.lastName)
-    : null;
+    return Array.from(spouseNames).sort((left, right) => left.localeCompare(right));
+  };
   const hasChildren = childRenderNodes.length > 0;
   const isDepthLimitReached = depth >= MAX_GENERATION_DEPTH - 1;
   const canExpandChildren = hasChildren && !isDepthLimitReached;
@@ -2851,7 +2918,14 @@ const TreeNode = ({
   };
 
   return (
-    <View style={[styles.treeNode, viewMode === "LIST" && styles.treeNodeList, { marginLeft: depth * 14 }]}>
+    <View
+      style={[
+        styles.treeNode,
+        viewMode === "LIST" && styles.treeNodeList,
+        depth === 0 && styles.treeRootNode,
+        { marginLeft: depth * 14 },
+      ]}
+    >
       <Pressable
         style={[
           styles.treeCard,
@@ -2863,9 +2937,7 @@ const TreeNode = ({
         onPress={isRootFocusSelectable || canExpandChildren ? handleCardPress : undefined}
       >
         <View style={styles.treeTitleRow}>
-          <Text style={[styles.treeBranchLabel, { color: primaryColor }]}>
-            {partner ? "Parent Pair" : "Member"} | Generation {depth + 1}
-          </Text>
+          <Text style={[styles.treeBranchLabel, { color: primaryColor }]}>Generation {depth + 1}</Text>
           {canExpandChildren ? (
             <Text style={[styles.treeToggle, { backgroundColor: primaryColor }]}>
               {isCollapsed ? `+ ${childRenderNodes.length}` : `- ${childRenderNodes.length}`}
@@ -2873,36 +2945,21 @@ const TreeNode = ({
           ) : null}
         </View>
 
-        {partner ? (
-          <View style={styles.treePairRow}>
+        <View style={styles.treeMemberCardsRow}>
+          {membersForNode.map((nodeMember) => (
             <TreePersonCard
-              person={person}
+              key={`${personId}-${partnerId ?? "single"}-${nodeMember.id}`}
+              person={nodeMember}
               primaryColor={primaryColor}
               showMemberPhotos={showMemberPhotos}
-              familyName={personFamilyName}
+              familyName={familyNameByPersonId.get(nodeMember.id) ?? familyNameFromLastName(nodeMember.lastName)}
               viewMode={viewMode}
+              cardWidth={cardWidth}
+              cardHeight={cardHeight}
+              spouseNames={resolveSpouseNamesForPerson(nodeMember.id)}
             />
-
-            <View style={[styles.treePairConnector, { borderTopColor: primaryColor }]} />
-
-            <TreePersonCard
-              person={partner}
-              primaryColor={primaryColor}
-              showMemberPhotos={showMemberPhotos}
-              familyName={partnerFamilyName ?? "Unknown"}
-              viewMode={viewMode}
-            />
-          </View>
-        ) : (
-          <TreePersonCard
-            person={person}
-            primaryColor={primaryColor}
-            showMemberPhotos={showMemberPhotos}
-            familyName={personFamilyName}
-            viewMode={viewMode}
-            spouseNames={spouseNames}
-          />
-        )}
+          ))}
+        </View>
 
         {isDepthLimitReached && hasChildren ? (
           <Text style={[styles.treeDepthLimitText, { color: primaryColor }]}>
@@ -2933,6 +2990,8 @@ const TreeNode = ({
                 secondaryColor={secondaryColor}
                 showMemberPhotos={showMemberPhotos}
                 onToggle={onToggle}
+                cardWidth={cardWidth}
+                cardHeight={cardHeight}
               />
             </View>
           ))}
@@ -3375,6 +3434,7 @@ const styles = StyleSheet.create({
   },
   verticalSectionsColumn: {
     gap: 8,
+    alignItems: "center",
   },
   horizontalSectionsRow: {
     flexDirection: "row",
@@ -3649,6 +3709,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 12,
   },
+  treePanelCanvas: {
+    backgroundColor: "#e6eeef",
+    borderColor: "#d5e1e2",
+  },
   sectionModeButton: {
     borderWidth: 1,
     borderRadius: 999,
@@ -3690,13 +3754,15 @@ const styles = StyleSheet.create({
   },
   familyTreeGroupCard: {
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     marginBottom: 12,
+    alignSelf: "center",
   },
   familyTreeGroupCardList: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
   },
   familyTreeGroupHeader: {
     flexDirection: "row",
@@ -3758,31 +3824,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   treeNode: {
-    marginBottom: 6,
+    marginBottom: 14,
+  },
+  treeRootNode: {
+    alignSelf: "center",
   },
   treeNodeList: {
-    marginBottom: 4,
+    marginBottom: 10,
   },
   treeCard: {
     borderWidth: 1,
-    borderColor: "#c9dbd1",
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: "#f8fcf9",
+    borderColor: "transparent",
+    borderRadius: 14,
+    padding: 8,
+    backgroundColor: "transparent",
+    alignItems: "center",
+    width: "100%",
   },
   treeCardList: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingVertical: 8,
     paddingHorizontal: 8,
   },
   treeCardBranch: {
-    borderColor: "#a5c1b4",
-    backgroundColor: "#f4faf6",
+    borderColor: "#d5e3df",
+    backgroundColor: "#f3f7f7",
   },
   treeBranchLabel: {
     fontWeight: "700",
-    color: "#2e5f4f",
-    fontSize: 12,
+    color: "#344a43",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   treeTitleRow: {
     flexDirection: "row",
@@ -3790,22 +3863,42 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  treePairRow: {
-    marginTop: 8,
+  treeMemberCardsRow: {
+    marginTop: 16,
     flexDirection: "row",
-    alignItems: "stretch",
-    gap: 8,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    width: "100%",
   },
   treePersonTile: {
-    flex: 1,
+    flex: 0,
+    position: "relative",
     borderWidth: 1,
-    borderColor: "#c9dbd1",
-    borderRadius: 10,
-    padding: 8,
-    backgroundColor: "#f8fcf9",
+    borderColor: "#d8e3df",
+    borderRadius: 12,
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 10,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "flex-start",
   },
   treePersonTilePortrait: {
     flex: 0,
+  },
+  treePersonAvatarWrap: {
+    position: "absolute",
+    top: -36,
+    borderWidth: 3,
+    borderRadius: 40,
+    padding: 2,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   treePersonHeaderRow: {
     flexDirection: "row",
@@ -3813,44 +3906,83 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   treePersonDetailColumn: {
-    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    gap: 4,
   },
   memberPhoto: {
-    borderWidth: 1,
+    borderWidth: 2,
     backgroundColor: "#ffffff",
   },
   memberPhotoFallback: {
-    borderWidth: 1,
-    backgroundColor: "#f3f8f5",
+    borderWidth: 2,
+    backgroundColor: "#eef5f2",
     alignItems: "center",
     justifyContent: "center",
   },
-  treePairConnector: {
-    alignSelf: "center",
-    width: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#7da698",
+  memberPhotoInitials: {
+    fontWeight: "800",
+    letterSpacing: 0.6,
   },
   treeName: {
     fontWeight: "700",
-    color: "#184033",
+    color: "#1b2e29",
     fontSize: 14,
+    lineHeight: 18,
+    textAlign: "center",
   },
   treeToggle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    color: "#ffffff",
-    backgroundColor: "#2e5f4f",
+    color: "#263f37",
+    backgroundColor: "#d9e8e3",
     borderRadius: 999,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     minWidth: 42,
     textAlign: "center",
   },
   treeMeta: {
-    color: "#3f6356",
+    color: "#2f4740",
     marginTop: 2,
     fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  treeMetaSecondary: {
+    color: "#415b53",
+    marginTop: 1,
+    fontSize: 11,
+    lineHeight: 13,
+    textAlign: "center",
+  },
+  treeInfoPill: {
+    width: "100%",
+    backgroundColor: "#eef4f1",
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+    borderWidth: 1,
+    borderColor: "#d7e3de",
+  },
+  treeInfoPillText: {
+    color: "#2f4740",
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  treeStatusBadge: {
+    marginTop: 2,
+    backgroundColor: "#f45151",
+    borderRadius: 999,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  treeStatusBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "800",
   },
   treeDepthLimitText: {
     marginTop: 8,
@@ -3858,22 +3990,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   treeChildrenBlock: {
-    marginTop: 8,
+    marginTop: 10,
     marginLeft: 14,
-    paddingLeft: 12,
-    borderLeftWidth: 1,
-    borderLeftColor: "#a4c1b4",
+    paddingLeft: 14,
+    borderLeftWidth: 2,
+    borderLeftColor: "#596862",
   },
   treeChildItem: {
     position: "relative",
   },
   treeChildConnector: {
     position: "absolute",
-    left: -12,
-    top: 20,
-    width: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#a4c1b4",
+    left: -14,
+    top: 24,
+    width: 14,
+    borderTopWidth: 2,
+    borderTopColor: "#596862",
   },
   treeChildTailMask: {
     position: "absolute",
