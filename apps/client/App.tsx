@@ -20,6 +20,7 @@ import { MemberDetailsCard } from "./src/components/members/MemberDetailsCard";
 import { ColorPickerField } from "./src/components/settings/ColorPickerField";
 import { SectionRefreshButton, SectionViewModeToggle, SettingsToggle } from "./src/components/common/SectionControls";
 import { FamilyFilterSelector } from "./src/components/common/FamilyFilterSelector";
+import { uiCommonStyles } from "./src/styles/uiStyles";
 import {
   Family,
   FamilyGraph,
@@ -873,7 +874,7 @@ const App = () => {
                 backgroundColor: uiTheme.secondaryColor,
                 borderColor: uiTheme.primaryColor,
               },
-              styles.shadowStrong,
+              uiCommonStyles.shadowStrong,
             ]}
             onPress={() => setActivePage((previous) => (previous === "HOME" ? "SETTINGS" : "HOME"))}
           >
@@ -881,7 +882,7 @@ const App = () => {
           </Pressable>
         </View>
 
-        <View style={[styles.pageHeaderCard, { borderColor: uiTheme.panelBorderColor, backgroundColor: uiTheme.surfaceColor }, styles.shadowSoft]}>
+        <View style={[styles.pageHeaderCard, { borderColor: uiTheme.panelBorderColor, backgroundColor: uiTheme.surfaceColor }, uiCommonStyles.shadowSoft]}>
           <Text style={[styles.pageHeaderTitle, { color: uiTheme.primaryColor }]}>{pageHeader.title}</Text>
           <Text style={[styles.pageHeaderDescription, { color: uiTheme.subtitleColor }]}>{pageHeader.description}</Text>
         </View>
@@ -920,7 +921,7 @@ const App = () => {
                   !sidebarEnabled && !isWideLayout && styles.sidebarCollapsedMobile,
                   !isWideLayout && styles.sidebarStacked,
                   { backgroundColor: uiTheme.secondaryColor, borderColor: uiTheme.primaryColor },
-                  styles.shadowSoft,
+                  uiCommonStyles.shadowSoft,
                 ]}
                 onHoverIn={revealSidebarToggle}
                 onHoverOut={hideSidebarToggleWithDelay}
@@ -956,7 +957,7 @@ const App = () => {
                             borderColor: uiTheme.primaryColor,
                             backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
                           },
-                          styles.shadowSoft,
+                          uiCommonStyles.shadowSoft,
                         ]}
                         onPress={() => setActiveTab(tab.key)}
                       >
@@ -995,7 +996,7 @@ const App = () => {
                             borderColor: uiTheme.primaryColor,
                             backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
                           },
-                          styles.shadowSoft,
+                          uiCommonStyles.shadowSoft,
                         ]}
                         onPress={() => setActiveTab(tab.key)}
                       >
@@ -1021,7 +1022,7 @@ const App = () => {
                           styles.tabButton,
                           { backgroundColor: uiTheme.secondaryColor },
                           activeTab === tab.key && { backgroundColor: uiTheme.primaryColor, borderColor: uiTheme.primaryColor },
-                          styles.shadowSoft,
+                          uiCommonStyles.shadowSoft,
                         ]}
                         onPress={() => setActiveTab(tab.key)}
                       >
@@ -1068,7 +1069,7 @@ const App = () => {
                   }
                 >
                   {showRefreshIndicator ? (
-                    <View style={[styles.refreshIndicator, { borderColor: uiTheme.panelBorderColor }, styles.shadowSoft]}>
+                    <View style={[styles.refreshIndicator, { borderColor: uiTheme.panelBorderColor }, uiCommonStyles.shadowSoft]}>
                       <ActivityIndicator size="small" color={uiTheme.primaryColor} />
                       <Text style={[styles.refreshIndicatorText, { color: uiTheme.primaryColor }]}>Syncing latest family data...</Text>
                     </View>
@@ -1222,14 +1223,14 @@ const SettingsPage = ({
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <View style={[styles.panel, styles.shadowSoft]}>
+      <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
         <Text style={styles.panelTitle}>Settings</Text>
         <Text style={styles.panelHint}>
           Select a theme using preset mode or switch to customize mode for manual colors.
         </Text>
 
-        <Text style={styles.label}>Theme Mode</Text>
-        <View style={styles.optionRowWrap}>
+        <Text style={uiCommonStyles.label}>Theme Mode</Text>
+        <View style={uiCommonStyles.optionRowWrap}>
           {(["PRESET", "CUSTOMIZE"] as ThemeEditorMode[]).map((mode) => {
             const isSelected = themeEditorMode === mode;
             const label = mode === "PRESET" ? "Preset" : "Customize";
@@ -1238,13 +1239,13 @@ const SettingsPage = ({
               <Pressable
                 key={`theme-editor-mode-${mode}`}
                 style={[
-                  styles.optionButton,
+                  uiCommonStyles.optionButton,
                   { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
                   isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
                 ]}
                 onPress={() => onThemeEditorModeChange(mode)}
               >
-                <Text style={[styles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && styles.optionButtonTextActive]}>
+                <Text style={[uiCommonStyles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && uiCommonStyles.optionButtonTextActive]}>
                   {label}
                 </Text>
               </Pressable>
@@ -1254,20 +1255,20 @@ const SettingsPage = ({
 
         {!isCustomizeMode ? (
           <>
-            <Text style={styles.label}>Theme Preset</Text>
-            <View style={styles.optionRowWrap}>
+            <Text style={uiCommonStyles.label}>Theme Preset</Text>
+            <View style={uiCommonStyles.optionRowWrap}>
               {themePresets.map((preset) => {
                 const isSelected = selectedThemeId === preset.id;
                 return (
                   <Pressable
                     key={`settings-preset-${preset.id}`}
                     style={[
-                      styles.optionButton,
+                      uiCommonStyles.optionButton,
                       isSelected && { backgroundColor: resolvedPrimaryColor, borderColor: resolvedPrimaryColor },
                     ]}
                     onPress={() => onPresetSelect(preset.id)}
                   >
-                    <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextActive]}>
+                    <Text style={[uiCommonStyles.optionButtonText, isSelected && uiCommonStyles.optionButtonTextActive]}>
                       {preset.label}
                     </Text>
                   </Pressable>
@@ -1285,7 +1286,7 @@ const SettingsPage = ({
             <TextInput
               value={primaryColorInput}
               onChangeText={applyPrimaryColor}
-              style={styles.input}
+              style={uiCommonStyles.input}
               autoCapitalize="none"
               autoCorrect={false}
               placeholder="#2e5f4f"
@@ -1302,7 +1303,7 @@ const SettingsPage = ({
             <TextInput
               value={secondaryColorInput}
               onChangeText={applySecondaryColor}
-              style={styles.input}
+              style={uiCommonStyles.input}
               autoCapitalize="none"
               autoCorrect={false}
               placeholder="#d9e6de"
@@ -1322,8 +1323,8 @@ const SettingsPage = ({
           <Text style={styles.settingsSwatchText}>Applied secondary: {resolvedSecondaryColor}</Text>
         </View>
 
-        <Text style={styles.subsectionTitle}>Navigation</Text>
-        <View style={styles.optionRowWrap}>
+        <Text style={uiCommonStyles.subsectionTitle}>Navigation</Text>
+        <View style={uiCommonStyles.optionRowWrap}>
           {(["SIDEBAR", "TOOLBAR"] as LayoutMode[]).map((mode) => {
             const isSelected = layoutMode === mode;
             const label = mode === "SIDEBAR" ? "Sidebar" : "Toolbar";
@@ -1332,13 +1333,13 @@ const SettingsPage = ({
               <Pressable
                 key={`layout-mode-${mode}`}
                 style={[
-                  styles.optionButton,
+                  uiCommonStyles.optionButton,
                   { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
                   isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
                 ]}
                 onPress={() => onLayoutModeSelect(mode)}
               >
-                <Text style={[styles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && styles.optionButtonTextActive]}>
+                <Text style={[uiCommonStyles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && uiCommonStyles.optionButtonTextActive]}>
                   {label}
                 </Text>
               </Pressable>
@@ -1346,7 +1347,7 @@ const SettingsPage = ({
           })}
         </View>
 
-        <Text style={styles.subsectionTitle}>Display Options</Text>
+        <Text style={uiCommonStyles.subsectionTitle}>Display Options</Text>
         <SettingsToggle
           label="Show Member Photos"
           value={showMemberPhotos}
@@ -1451,7 +1452,7 @@ const FamiliesPanel = ({
   };
 
   return (
-    <View style={[styles.panel, styles.shadowSoft]}>
+    <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
       <View style={styles.panelHeaderRow}>
         <View style={styles.panelHeaderTextBlock}>
           <Text style={styles.panelTitle}>Families</Text>
@@ -1462,7 +1463,7 @@ const FamiliesPanel = ({
         </View>
       </View>
 
-      <Text style={styles.label}>Select Family</Text>
+      <Text style={uiCommonStyles.label}>Select Family</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
         <Pressable
           style={[
@@ -1506,43 +1507,43 @@ const FamiliesPanel = ({
         </Text>
       </View>
 
-      <Text style={styles.label}>Family Name</Text>
+      <Text style={uiCommonStyles.label}>Family Name</Text>
       <TextInput
         value={formState.name}
         onChangeText={(text) => setFormState((previous) => ({ ...previous, name: text }))}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="Johnson"
       />
 
-      <Text style={styles.label}>Motto (optional)</Text>
+      <Text style={uiCommonStyles.label}>Motto (optional)</Text>
       <TextInput
         value={formState.motto}
         onChangeText={(text) => setFormState((previous) => ({ ...previous, motto: text }))}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="Together we grow"
       />
 
-      <Text style={styles.label}>Description (optional)</Text>
+      <Text style={uiCommonStyles.label}>Description (optional)</Text>
       <TextInput
         value={formState.description}
         onChangeText={(text) => setFormState((previous) => ({ ...previous, description: text }))}
-        style={[styles.input, styles.multilineInput]}
+        style={[uiCommonStyles.input, styles.multilineInput]}
         multiline
         placeholder="Family background, history, and notes..."
       />
 
-      <View style={styles.actionRow}>
+      <View style={uiCommonStyles.actionRow}>
         <Pressable
-          style={[styles.primaryButton, { backgroundColor: primaryColor }]}
+          style={[uiCommonStyles.primaryButton, { backgroundColor: primaryColor }]}
           onPress={() => void saveFamily()}
           disabled={isMutating}
         >
-          <Text style={styles.primaryButtonText}>{selectedFamily ? "Update Family" : "Add Family"}</Text>
+          <Text style={uiCommonStyles.primaryButtonText}>{selectedFamily ? "Update Family" : "Add Family"}</Text>
         </Pressable>
 
         {selectedFamily ? (
-          <Pressable style={styles.secondaryDangerButton} onPress={() => void removeFamily()} disabled={isMutating}>
-            <Text style={styles.secondaryDangerButtonText}>Delete</Text>
+          <Pressable style={uiCommonStyles.secondaryDangerButton} onPress={() => void removeFamily()} disabled={isMutating}>
+            <Text style={uiCommonStyles.secondaryDangerButtonText}>Delete</Text>
           </Pressable>
         ) : null}
       </View>
@@ -1683,7 +1684,7 @@ const MembersPanel = ({
   };
 
   return (
-    <View style={[styles.panel, styles.shadowSoft]}>
+    <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
       <View style={styles.panelHeaderRow}>
         <View style={styles.panelHeaderTextBlock}>
           <Text style={styles.panelTitle}>Members</Text>
@@ -1707,7 +1708,7 @@ const MembersPanel = ({
         </Text>
       ) : null}
 
-      <Text style={styles.label}>Select Existing Member</Text>
+      <Text style={uiCommonStyles.label}>Select Existing Member</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
         <Pressable
           style={[
@@ -1734,7 +1735,7 @@ const MembersPanel = ({
                   styles.memberFamilyCardListMode,
                   { width: listFamilyCardWidth },
                   { borderColor: primaryColor, backgroundColor: `${secondaryColor}77` },
-                  styles.shadowSoft,
+                  uiCommonStyles.shadowSoft,
                 ]}
               >
                 <View style={styles.familyGroupHeaderRow}>
@@ -1769,7 +1770,7 @@ const MembersPanel = ({
           {visibleGroupedFamilies.map((familyGroup) => (
             <View
               key={`family-group-${familyGroup.key}`}
-              style={[styles.familyGroupCard, { borderColor: primaryColor, backgroundColor: `${secondaryColor}77` }, styles.shadowSoft]}
+              style={[styles.familyGroupCard, { borderColor: primaryColor, backgroundColor: `${secondaryColor}77` }, uiCommonStyles.shadowSoft]}
             >
               <View style={styles.familyGroupHeaderRow}>
                 <Text style={[styles.familyGroupTitle, { color: primaryColor }]}>{familyGroup.familyName} Family</Text>
@@ -1803,24 +1804,24 @@ const MembersPanel = ({
         <Text style={styles.mutedText}>No members found for the selected family.</Text>
       ) : null}
 
-      <Text style={styles.label}>First Name</Text>
+      <Text style={uiCommonStyles.label}>First Name</Text>
       <TextInput
         value={formState.firstName}
         onChangeText={(text) => setFormState((prev) => ({ ...prev, firstName: text }))}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="John"
       />
 
-      <Text style={styles.label}>Last Name</Text>
+      <Text style={uiCommonStyles.label}>Last Name</Text>
       <TextInput
         value={formState.lastName}
         onChangeText={(text) => setFormState((prev) => ({ ...prev, lastName: text }))}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="Doe"
       />
 
-      <Text style={styles.label}>Gender</Text>
-      <View style={styles.optionRowWrap}>
+      <Text style={uiCommonStyles.label}>Gender</Text>
+      <View style={uiCommonStyles.optionRowWrap}>
         {genderOptions.map((option) => {
           const isSelected = formState.gender === option;
           const label = option || "Unspecified";
@@ -1829,13 +1830,13 @@ const MembersPanel = ({
             <Pressable
               key={label}
               style={[
-                styles.optionButton,
+                uiCommonStyles.optionButton,
                 { borderColor: primaryColor, backgroundColor: secondaryColor },
                 isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
               ]}
               onPress={() => setFormState((prev) => ({ ...prev, gender: option }))}
             >
-              <Text style={[styles.optionButtonText, { color: primaryColor }, isSelected && styles.optionButtonTextActive]}>
+              <Text style={[uiCommonStyles.optionButtonText, { color: primaryColor }, isSelected && uiCommonStyles.optionButtonTextActive]}>
                 {label}
               </Text>
             </Pressable>
@@ -1843,48 +1844,48 @@ const MembersPanel = ({
         })}
       </View>
 
-      <Text style={styles.label}>Date of Birth (YYYY-MM-DD)</Text>
+      <Text style={uiCommonStyles.label}>Date of Birth (YYYY-MM-DD)</Text>
       <TextInput
         value={formState.dateOfBirth}
         onChangeText={(text) => setFormState((prev) => ({ ...prev, dateOfBirth: text }))}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="1985-10-20"
       />
 
-      <Text style={styles.label}>Date of Death (optional)</Text>
+      <Text style={uiCommonStyles.label}>Date of Death (optional)</Text>
       <TextInput
         value={formState.dateOfDeath}
         onChangeText={(text) => setFormState((prev) => ({ ...prev, dateOfDeath: text }))}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="2024-02-02"
       />
 
-      <Text style={styles.label}>Photo URL (optional)</Text>
+      <Text style={uiCommonStyles.label}>Photo URL (optional)</Text>
       <TextInput
         value={formState.photoUrl}
         onChangeText={(text) => setFormState((prev) => ({ ...prev, photoUrl: text }))}
-        style={styles.input}
+        style={uiCommonStyles.input}
         autoCapitalize="none"
         placeholder="https://..."
       />
 
-      <Text style={styles.label}>Notes</Text>
+      <Text style={uiCommonStyles.label}>Notes</Text>
       <TextInput
         value={formState.notes}
         onChangeText={(text) => setFormState((prev) => ({ ...prev, notes: text }))}
-        style={[styles.input, styles.multilineInput]}
+        style={[uiCommonStyles.input, styles.multilineInput]}
         multiline
         placeholder="Biography, achievements, context..."
       />
 
-      <View style={styles.actionRow}>
-        <Pressable style={[styles.primaryButton, { backgroundColor: primaryColor }]} onPress={() => void save()} disabled={isMutating}>
-          <Text style={styles.primaryButtonText}>{selectedPerson ? "Update Member" : "Add Member"}</Text>
+      <View style={uiCommonStyles.actionRow}>
+        <Pressable style={[uiCommonStyles.primaryButton, { backgroundColor: primaryColor }]} onPress={() => void save()} disabled={isMutating}>
+          <Text style={uiCommonStyles.primaryButtonText}>{selectedPerson ? "Update Member" : "Add Member"}</Text>
         </Pressable>
 
         {selectedPerson ? (
-          <Pressable style={styles.secondaryDangerButton} onPress={() => void remove()} disabled={isMutating}>
-            <Text style={styles.secondaryDangerButtonText}>Delete</Text>
+          <Pressable style={uiCommonStyles.secondaryDangerButton} onPress={() => void remove()} disabled={isMutating}>
+            <Text style={uiCommonStyles.secondaryDangerButtonText}>Delete</Text>
           </Pressable>
         ) : null}
       </View>
@@ -2046,7 +2047,7 @@ const RelationshipsPanel = ({
   };
 
   return (
-    <View style={[styles.panel, styles.shadowSoft]}>
+    <View style={[uiCommonStyles.panel, uiCommonStyles.shadowSoft]}>
       <View style={styles.panelHeaderRow}>
         <View style={styles.panelHeaderTextBlock}>
           <Text style={styles.panelTitle}>Relationships</Text>
@@ -2065,8 +2066,8 @@ const RelationshipsPanel = ({
       />
       {filteredPersons.length === 0 ? <Text style={styles.mutedText}>No members found for the selected family.</Text> : null}
 
-      <Text style={styles.subsectionTitle}>Parent to Child</Text>
-      <Text style={styles.label}>Parent</Text>
+      <Text style={uiCommonStyles.subsectionTitle}>Parent to Child</Text>
+      <Text style={uiCommonStyles.label}>Parent</Text>
       <HorizontalPersonSelector
         persons={filteredPersons}
         selectedId={parentId}
@@ -2076,7 +2077,7 @@ const RelationshipsPanel = ({
         viewMode={viewMode}
       />
 
-      <Text style={styles.label}>Child</Text>
+      <Text style={uiCommonStyles.label}>Child</Text>
       <HorizontalPersonSelector
         persons={filteredPersons}
         selectedId={childId}
@@ -2086,13 +2087,13 @@ const RelationshipsPanel = ({
         viewMode={viewMode}
       />
 
-      <Text style={styles.label}>Relationship Type</Text>
-      <View style={styles.optionRowWrap}>
+      <Text style={uiCommonStyles.label}>Relationship Type</Text>
+      <View style={uiCommonStyles.optionRowWrap}>
         {parentTypeOptions.map((option) => (
           <Pressable
             key={option}
             style={[
-              styles.optionButton,
+              uiCommonStyles.optionButton,
               { borderColor: primaryColor, backgroundColor: secondaryColor },
               relationType === option && { backgroundColor: primaryColor, borderColor: primaryColor },
             ]}
@@ -2100,9 +2101,9 @@ const RelationshipsPanel = ({
           >
             <Text
               style={[
-                styles.optionButtonText,
+                uiCommonStyles.optionButtonText,
                 { color: primaryColor },
-                relationType === option && styles.optionButtonTextActive,
+                relationType === option && uiCommonStyles.optionButtonTextActive,
               ]}
             >
               {option}
@@ -2112,11 +2113,11 @@ const RelationshipsPanel = ({
       </View>
 
       <Pressable
-        style={[styles.primaryButton, { backgroundColor: primaryColor }]}
+        style={[uiCommonStyles.primaryButton, { backgroundColor: primaryColor }]}
         onPress={() => void createParentChildLink()}
         disabled={isMutating}
       >
-        <Text style={styles.primaryButtonText}>Add Parent-Child Link</Text>
+        <Text style={uiCommonStyles.primaryButtonText}>Add Parent-Child Link</Text>
       </Pressable>
 
       <View style={styles.listBlock}>
@@ -2149,8 +2150,8 @@ const RelationshipsPanel = ({
         })}
       </View>
 
-      <Text style={styles.subsectionTitle}>Spouses</Text>
-      <Text style={styles.label}>Person A</Text>
+      <Text style={uiCommonStyles.subsectionTitle}>Spouses</Text>
+      <Text style={uiCommonStyles.label}>Person A</Text>
       <HorizontalPersonSelector
         persons={filteredPersons}
         selectedId={spouseAId}
@@ -2160,7 +2161,7 @@ const RelationshipsPanel = ({
         viewMode={viewMode}
       />
 
-      <Text style={styles.label}>Person B</Text>
+      <Text style={uiCommonStyles.label}>Person B</Text>
       <HorizontalPersonSelector
         persons={filteredPersons}
         selectedId={spouseBId}
@@ -2170,28 +2171,28 @@ const RelationshipsPanel = ({
         viewMode={viewMode}
       />
 
-      <Text style={styles.label}>Married At (optional)</Text>
+      <Text style={uiCommonStyles.label}>Married At (optional)</Text>
       <TextInput
         value={marriedAt}
         onChangeText={setMarriedAt}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="YYYY-MM-DD"
       />
 
-      <Text style={styles.label}>Divorced At (optional)</Text>
+      <Text style={uiCommonStyles.label}>Divorced At (optional)</Text>
       <TextInput
         value={divorcedAt}
         onChangeText={setDivorcedAt}
-        style={styles.input}
+        style={uiCommonStyles.input}
         placeholder="YYYY-MM-DD"
       />
 
       <Pressable
-        style={[styles.primaryButton, { backgroundColor: primaryColor }]}
+        style={[uiCommonStyles.primaryButton, { backgroundColor: primaryColor }]}
         onPress={() => void createSpouseLink()}
         disabled={isMutating}
       >
-        <Text style={styles.primaryButtonText}>Add Spouse Link</Text>
+        <Text style={uiCommonStyles.primaryButtonText}>Add Spouse Link</Text>
       </Pressable>
 
       <View style={styles.listBlock}>
@@ -2448,7 +2449,7 @@ const TreePersonCard = ({
         viewMode === "TILE" && styles.treePersonTilePortrait,
         { width: cardWidth, minHeight: cardHeight },
         { borderColor: primaryColor, backgroundColor: "#ffffff" },
-        styles.shadowSoft,
+        uiCommonStyles.shadowSoft,
       ]}
     >
       <View style={styles.treePersonHeaderRow}>
@@ -2812,7 +2813,7 @@ const TreePanel = ({
           viewMode === "LIST" && styles.familyTreeGroupCardList,
           { minWidth: familySectionWidth },
           { borderColor: primaryColor, backgroundColor: `${secondaryColor}66` },
-          styles.shadowSoft,
+          uiCommonStyles.shadowSoft,
         ]}
       >
         <Pressable
@@ -2840,7 +2841,7 @@ const TreePanel = ({
 
         {!isFamilyCollapsed && viewMode === "TILE" && focusedNodeKey ? (
           <Pressable
-            style={[styles.familyTreeFocusButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowSoft]}
+            style={[styles.familyTreeFocusButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }, uiCommonStyles.shadowSoft]}
             onPress={() => clearFocusedRootForFamily(familyGroup.familyName)}
           >
             <Ionicons name="arrow-undo-outline" size={14} color={primaryColor} />
@@ -2881,7 +2882,7 @@ const TreePanel = ({
   });
 
   return (
-    <View style={[styles.panel, styles.treePanelCanvas, styles.shadowSoft]}>
+    <View style={[uiCommonStyles.panel, styles.treePanelCanvas, uiCommonStyles.shadowSoft]}>
       <View style={styles.panelHeaderRow}>
         <View style={styles.panelHeaderTextBlock}>
           <Text style={styles.panelTitle}>Family Tree</Text>
@@ -2908,7 +2909,7 @@ const TreePanel = ({
               borderColor: primaryColor,
               backgroundColor: shouldCollapseAll ? primaryColor : secondaryColor,
             },
-            styles.shadowStrong,
+            uiCommonStyles.shadowStrong,
           ]}
           onPress={handleToggleAllBranches}
         >
@@ -3108,7 +3109,7 @@ const TreeNode = ({
           hasChildren && styles.treeCardBranch,
           { minWidth: treeCardMinWidth },
           { borderColor: primaryColor, backgroundColor: secondaryColor },
-          styles.shadowSoft,
+          uiCommonStyles.shadowSoft,
         ]}
         onPress={isRootFocusSelectable || canExpandChildren ? handleCardPress : undefined}
       >
@@ -3186,20 +3187,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingBottom: 24,
-  },
-  shadowSoft: {
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  shadowStrong: {
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 5,
   },
   headerTopRow: {
     flexDirection: "row",
@@ -3442,14 +3429,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  panel: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#d9e6de",
-    marginBottom: 16,
-  },
   panelTitle: {
     fontSize: 20,
     fontWeight: "700",
@@ -3495,13 +3474,6 @@ const styles = StyleSheet.create({
   familyInfoText: {
     fontSize: 12,
     fontWeight: "700",
-  },
-  subsectionTitle: {
-    marginTop: 12,
-    marginBottom: 6,
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#153a2f",
   },
   selectorRow: {
     marginBottom: 12,
@@ -3614,20 +3586,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 4,
   },
-  label: {
-    marginBottom: 4,
-    fontWeight: "600",
-    color: "#1f4b3d",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#c2d5cc",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    marginBottom: 10,
-    backgroundColor: "#ffffff",
-  },
   invalidHint: {
     color: "#b43a3a",
     marginTop: -6,
@@ -3656,73 +3614,6 @@ const styles = StyleSheet.create({
   multilineInput: {
     minHeight: 80,
     textAlignVertical: "top",
-  },
-  optionRowWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 10,
-  },
-  optionButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#b8ccc2",
-  },
-  optionButtonActive: {
-    backgroundColor: "#2e5f4f",
-    borderColor: "#2e5f4f",
-  },
-  optionButtonText: {
-    color: "#2e5f4f",
-    fontWeight: "600",
-    fontSize: 12,
-  },
-  optionButtonTextActive: {
-    color: "#ffffff",
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  primaryButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: "#2e5f4f",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
-  secondaryDangerButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: "#fff5f5",
-    borderWidth: 1,
-    borderColor: "#d43838",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  secondaryDangerButtonText: {
-    color: "#d43838",
-    fontWeight: "700",
   },
   listBlock: {
     marginTop: 12,

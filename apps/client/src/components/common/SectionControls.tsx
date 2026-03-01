@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { uiCommonStyles } from "../../styles/uiStyles";
 
 export type SectionViewMode = "TILE" | "LIST";
 
@@ -16,7 +17,7 @@ export const SettingsToggle = ({ label, value, accentColor, onPress }: SettingsT
       styles.settingsToggleRow,
       { borderColor: accentColor },
       value && { backgroundColor: `${accentColor}22` },
-      styles.shadowSoft,
+      uiCommonStyles.shadowSoft,
     ]}
     onPress={onPress}
   >
@@ -41,7 +42,7 @@ type SectionRefreshButtonProps = {
 
 export const SectionRefreshButton = ({ primaryColor, isRefreshing, onRefresh }: SectionRefreshButtonProps) => (
   <Pressable
-    style={[styles.refreshButton, { backgroundColor: primaryColor }, styles.shadowSoft]}
+    style={[styles.refreshButton, { backgroundColor: primaryColor }, uiCommonStyles.shadowSoft]}
     onPress={() => void onRefresh()}
     disabled={isRefreshing}
   >
@@ -65,7 +66,7 @@ export const SectionViewModeToggle = ({ primaryColor, viewMode, onToggle }: Sect
 
   return (
     <Pressable
-      style={[styles.sectionModeButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowSoft]}
+      style={[styles.sectionModeButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }, uiCommonStyles.shadowSoft]}
       onPress={onToggle}
     >
       <Ionicons name={isTile ? "grid-outline" : "list-outline"} size={15} color={primaryColor} />
@@ -75,13 +76,6 @@ export const SectionViewModeToggle = ({ primaryColor, viewMode, onToggle }: Sect
 };
 
 const styles = StyleSheet.create({
-  shadowSoft: {
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
   refreshButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,

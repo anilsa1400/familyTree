@@ -1,5 +1,6 @@
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Person } from "../../types/family";
+import { uiCommonStyles } from "../../styles/uiStyles";
 
 type MemberDetailsCardProps = {
   person: Person;
@@ -71,7 +72,7 @@ export const MemberDetailsCard = ({
         isSelected
           ? { borderColor: primaryColor, backgroundColor: `${primaryColor}1a` }
           : { backgroundColor: "#ffffff" },
-        styles.shadowSoft,
+        uiCommonStyles.shadowSoft,
       ]}
       onPress={onPress}
     >
@@ -114,13 +115,6 @@ export const MemberDetailsCard = ({
 };
 
 const styles = StyleSheet.create({
-  shadowSoft: {
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
   memberDetailCard: {
     borderWidth: 1,
     borderRadius: 12,

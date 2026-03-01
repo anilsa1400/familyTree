@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { uiCommonStyles } from "../../styles/uiStyles";
 
 const basicColorPickerPalette = [
   "#2e5f4f",
@@ -44,7 +45,7 @@ export const ColorPickerField = ({ label, selectedColor, onSelectColor }: ColorP
   return (
     <View style={styles.colorPickerBlock}>
       <View style={styles.colorPickerHeaderRow}>
-        <Text style={styles.label}>{label}</Text>
+        <Text style={uiCommonStyles.label}>{label}</Text>
         <View style={styles.colorPickerValueChip}>
           <View style={[styles.colorPickerValueDot, { backgroundColor: selectedColor }]} />
           <Text style={styles.colorPickerValueText}>{selectedColor.toUpperCase()}</Text>
@@ -103,11 +104,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-  },
-  label: {
-    marginBottom: 4,
-    fontWeight: "600",
-    color: "#1f4b3d",
   },
   colorPickerValueChip: {
     flexDirection: "row",

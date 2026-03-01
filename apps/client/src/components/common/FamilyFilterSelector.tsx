@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useState } from "react";
+import { uiCommonStyles } from "../../styles/uiStyles";
 
 type FamilyFilterSelectorProps = {
   familyNames: string[];
@@ -33,7 +34,7 @@ export const FamilyFilterSelector = ({
       <Text style={styles.familyFilterLabel}>Viewing Family</Text>
       <View style={styles.familyDropdownContainer}>
         <Pressable
-          style={[styles.familyDropdownTrigger, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowSoft]}
+          style={[styles.familyDropdownTrigger, { borderColor: primaryColor, backgroundColor: "#ffffff" }, uiCommonStyles.shadowSoft]}
           onPress={() => {
             setSearchQuery("");
             setIsOpen(true);
@@ -62,7 +63,7 @@ export const FamilyFilterSelector = ({
                 setSearchQuery("");
               }}
             />
-            <View style={[styles.familyDropdownMenu, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowStrong]}>
+            <View style={[styles.familyDropdownMenu, { borderColor: primaryColor, backgroundColor: "#ffffff" }, uiCommonStyles.shadowStrong]}>
               <View style={styles.familyDropdownHeaderRow}>
                 <Text style={[styles.familyDropdownTitle, { color: primaryColor }]}>Select Family</Text>
                 <Pressable
@@ -119,20 +120,6 @@ export const FamilyFilterSelector = ({
 };
 
 const styles = StyleSheet.create({
-  shadowSoft: {
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  shadowStrong: {
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 5,
-  },
   familyFilterBlock: {
     marginBottom: 10,
   },
