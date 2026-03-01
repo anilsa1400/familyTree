@@ -1,4 +1,5 @@
 import {
+  FamilyRecord,
   ParentChildRelationRecord,
   PersonRecord,
   SpouseRelationRecord,
@@ -35,9 +36,19 @@ export type SerializedSpouseRelation = {
 };
 
 export type FamilyGraph = {
+  families: SerializedFamily[];
   persons: SerializedPerson[];
   parentChildRelations: SerializedParentChildRelation[];
   spouseRelations: SerializedSpouseRelation[];
+};
+
+export type SerializedFamily = {
+  id: string;
+  name: string;
+  motto: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export const serializePerson = (person: PersonRecord): SerializedPerson => ({
@@ -70,4 +81,13 @@ export const serializeSpouseRelation = (relation: SpouseRelationRecord): Seriali
   marriedAt: relation.married_at,
   divorcedAt: relation.divorced_at,
   createdAt: relation.created_at,
+});
+
+export const serializeFamily = (family: FamilyRecord): SerializedFamily => ({
+  id: family.id,
+  name: family.name,
+  motto: family.motto,
+  description: family.description,
+  createdAt: family.created_at,
+  updatedAt: family.updated_at,
 });

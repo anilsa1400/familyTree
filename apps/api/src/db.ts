@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS spouse_relations (
   FOREIGN KEY(person_b_id) REFERENCES persons(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS families (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  motto TEXT,
+  description TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ui_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   active_tab TEXT NOT NULL,
@@ -66,6 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_parent_child_parent_id ON parent_child_relations(
 CREATE INDEX IF NOT EXISTS idx_parent_child_child_id ON parent_child_relations(child_id);
 CREATE INDEX IF NOT EXISTS idx_spouse_a_id ON spouse_relations(person_a_id);
 CREATE INDEX IF NOT EXISTS idx_spouse_b_id ON spouse_relations(person_b_id);
+CREATE INDEX IF NOT EXISTS idx_families_name ON families(name);
 `);
 
 type TableInfoRow = {

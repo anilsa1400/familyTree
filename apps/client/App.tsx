@@ -18,7 +18,9 @@ import {
 import { useFamilyTree } from "./src/hooks/useFamilyTree";
 import { API_BASE_URL, getUiSettings, UiSettingsPayload, updateUiSettings } from "./src/lib/api";
 import {
+  Family,
   FamilyGraph,
+  FamilyInput,
   Gender,
   ParentType,
   Person,
@@ -26,7 +28,7 @@ import {
   SpouseRelation,
 } from "./src/types/family";
 
-type TabKey = "TREE" | "MEMBERS" | "RELATIONSHIPS";
+type TabKey = "TREE" | "MEMBERS" | "RELATIONSHIPS" | "FAMILIES";
 type AppPage = "HOME" | "SETTINGS";
 type LayoutMode = "SIDEBAR" | "TOOLBAR";
 type SectionViewMode = "TILE" | "LIST";
@@ -38,12 +40,14 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: "TREE", label: "Tree" },
   { key: "MEMBERS", label: "Members" },
   { key: "RELATIONSHIPS", label: "Relationships" },
+  { key: "FAMILIES", label: "Families" },
 ];
 
-const tabIconByKey: Record<TabKey, "git-branch-outline" | "people-outline" | "swap-horizontal-outline"> = {
+const tabIconByKey: Record<TabKey, "git-branch-outline" | "people-outline" | "swap-horizontal-outline" | "albums-outline"> = {
   TREE: "git-branch-outline",
   MEMBERS: "people-outline",
   RELATIONSHIPS: "swap-horizontal-outline",
+  FAMILIES: "albums-outline",
 };
 
 const genderOptions: (Gender | "")[] = ["", "MALE", "FEMALE", "NON_BINARY", "OTHER"];
@@ -106,7 +110,7 @@ type UiPreferences = {
 };
 
 const isTabKey = (value: unknown): value is TabKey =>
-  value === "TREE" || value === "MEMBERS" || value === "RELATIONSHIPS";
+  value === "TREE" || value === "MEMBERS" || value === "RELATIONSHIPS" || value === "FAMILIES";
 
 const isAppPage = (value: unknown): value is AppPage =>
   value === "HOME" || value === "SETTINGS";
@@ -124,12 +128,14 @@ const tabSlugByKey: Record<TabKey, string> = {
   TREE: "tree",
   MEMBERS: "members",
   RELATIONSHIPS: "relationships",
+  FAMILIES: "families",
 };
 
 const tabKeyBySlug: Record<string, TabKey> = {
   tree: "TREE",
   members: "MEMBERS",
   relationships: "RELATIONSHIPS",
+  families: "FAMILIES",
 };
 
 const pageSlugByKey: Record<AppPage, string> = {
@@ -323,6 +329,18 @@ const defaultFormState: PersonFormState = {
   notes: "",
 };
 
+type FamilyFormState = {
+  name: string;
+  motto: string;
+  description: string;
+};
+
+const defaultFamilyFormState: FamilyFormState = {
+  name: "",
+  motto: "",
+  description: "",
+};
+
 const buildPersonPayload = (state: PersonFormState): PersonInput => ({
   firstName: state.firstName,
   lastName: state.lastName,
@@ -337,6 +355,7 @@ const defaultSectionViewModeByTab: Record<TabKey, SectionViewMode> = {
   TREE: "TILE",
   MEMBERS: "TILE",
   RELATIONSHIPS: "TILE",
+  FAMILIES: "TILE",
 };
 
 const App = () => {
@@ -722,6 +741,9 @@ const App = () => {
     deleteParentChild,
     createSpouse,
     deleteSpouse,
+    createFamily,
+    updateFamily,
+    deleteFamily,
   } = useFamilyTree();
   const familyNameByPersonId = useMemo(() => buildFamilyNameMap(graph), [graph]);
   const familyNames = useMemo(
@@ -762,6 +784,10 @@ const App = () => {
       title: "Relationship Manager",
       description: "Link members as parents, children, and spouses with clear relationship records.",
     },
+    FAMILIES: {
+      title: "Family Directory",
+      description: "Create and maintain family details such as name, motto, and description.",
+    },
   };
 
   const pageHeader =
@@ -774,7 +800,10 @@ const App = () => {
 
   const isSidebarMode = layoutMode === "SIDEBAR";
   const hasGraphContent =
-    graph.persons.length > 0 || graph.parentChildRelations.length > 0 || graph.spouseRelations.length > 0;
+    graph.families.length > 0 ||
+    graph.persons.length > 0 ||
+    graph.parentChildRelations.length > 0 ||
+    graph.spouseRelations.length > 0;
   const showInitialLoader = isLoading && !isRefreshing && !hasGraphContent;
   const showRefreshIndicator = isRefreshing || (isLoading && hasGraphContent);
   const isSidebarToggleVisible = !isWideLayout || !sidebarEnabled || showSidebarHoverToggle;
@@ -906,6 +935,7 @@ const App = () => {
                       </Pressable>
                     ))}
                     <View style={styles.sidebarStatsBlock}>
+                      <Text style={styles.sidebarStatsText}>Families: {graph.families.length}</Text>
                       <Text style={styles.sidebarStatsText}>Members: {graph.persons.length}</Text>
                       <Text style={styles.sidebarStatsText}>Parent Links: {graph.parentChildRelations.length}</Text>
                       <Text style={styles.sidebarStatsText}>Spouse Links: {graph.spouseRelations.length}</Text>
@@ -1071,6 +1101,20 @@ const App = () => {
                       onDeleteParentChild={deleteParentChild}
                       onCreateSpouse={createSpouse}
                       onDeleteSpouse={deleteSpouse}
+                      onRefresh={handleRefresh}
+                      isRefreshing={showRefreshIndicator}
+                    />
+                  ) : null}
+
+                  {activeTab === "FAMILIES" ? (
+                    <FamiliesPanel
+                      families={graph.families}
+                      isMutating={isMutating}
+                      primaryColor={uiTheme.primaryColor}
+                      secondaryColor={uiTheme.secondaryColor}
+                      onCreate={createFamily}
+                      onUpdate={updateFamily}
+                      onDelete={deleteFamily}
                       onRefresh={handleRefresh}
                       isRefreshing={showRefreshIndicator}
                     />
@@ -1404,6 +1448,192 @@ const FamilyFilterSelector = ({
             </View>
           </View>
         </Modal>
+      </View>
+    </View>
+  );
+};
+
+type FamiliesPanelProps = {
+  families: Family[];
+  isMutating: boolean;
+  primaryColor: string;
+  secondaryColor: string;
+  onCreate: (payload: FamilyInput) => Promise<void>;
+  onUpdate: (familyId: string, payload: FamilyInput) => Promise<void>;
+  onDelete: (familyId: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  isRefreshing: boolean;
+};
+
+const FamiliesPanel = ({
+  families,
+  isMutating,
+  primaryColor,
+  secondaryColor,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onRefresh,
+  isRefreshing,
+}: FamiliesPanelProps) => {
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
+  const [formState, setFormState] = useState<FamilyFormState>(defaultFamilyFormState);
+
+  const sortedFamilies = useMemo(() => [...families].sort((left, right) => left.name.localeCompare(right.name)), [families]);
+  const selectedFamily = sortedFamilies.find((family) => family.id === selectedFamilyId) ?? null;
+
+  useEffect(() => {
+    if (!selectedFamilyId) {
+      return;
+    }
+
+    const exists = sortedFamilies.some((family) => family.id === selectedFamilyId);
+    if (!exists) {
+      setSelectedFamilyId(null);
+      setFormState(defaultFamilyFormState);
+    }
+  }, [selectedFamilyId, sortedFamilies]);
+
+  const selectFamily = (family: Family | null) => {
+    if (!family) {
+      setSelectedFamilyId(null);
+      setFormState(defaultFamilyFormState);
+      return;
+    }
+
+    setSelectedFamilyId(family.id);
+    setFormState({
+      name: family.name,
+      motto: family.motto ?? "",
+      description: family.description ?? "",
+    });
+  };
+
+  const saveFamily = async () => {
+    const name = formState.name.trim();
+    if (!name) {
+      return;
+    }
+
+    const payload: FamilyInput = {
+      name,
+      motto: toNullable(formState.motto),
+      description: toNullable(formState.description),
+    };
+
+    if (selectedFamilyId) {
+      await onUpdate(selectedFamilyId, payload);
+    } else {
+      await onCreate(payload);
+    }
+
+    selectFamily(null);
+  };
+
+  const removeFamily = async () => {
+    if (!selectedFamilyId) {
+      return;
+    }
+
+    await onDelete(selectedFamilyId);
+    selectFamily(null);
+  };
+
+  return (
+    <View style={[styles.panel, styles.shadowSoft]}>
+      <View style={styles.panelHeaderRow}>
+        <View style={styles.panelHeaderTextBlock}>
+          <Text style={styles.panelTitle}>Families</Text>
+          <Text style={styles.panelHint}>Add, edit, and remove family details.</Text>
+        </View>
+        <View style={styles.panelHeaderActions}>
+          <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
+        </View>
+      </View>
+
+      <Text style={styles.label}>Select Family</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+        <Pressable
+          style={[
+            styles.selectorPill,
+            { borderColor: primaryColor, backgroundColor: "#ffffff" },
+            !selectedFamilyId && { backgroundColor: primaryColor, borderColor: primaryColor },
+          ]}
+          onPress={() => selectFamily(null)}
+        >
+          <Text style={[styles.selectorPillText, { color: primaryColor }, !selectedFamilyId && styles.selectorPillTextActive]}>
+            New Family
+          </Text>
+        </Pressable>
+        {sortedFamilies.map((family) => (
+          <Pressable
+            key={family.id}
+            style={[
+              styles.selectorPill,
+              { borderColor: primaryColor, backgroundColor: "#ffffff" },
+              selectedFamilyId === family.id && { backgroundColor: primaryColor, borderColor: primaryColor },
+            ]}
+            onPress={() => selectFamily(family)}
+          >
+            <Text
+              style={[
+                styles.selectorPillText,
+                { color: primaryColor },
+                selectedFamilyId === family.id && styles.selectorPillTextActive,
+              ]}
+            >
+              {family.name}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <View style={[styles.familyInfoCard, { borderColor: primaryColor, backgroundColor: `${secondaryColor}66` }]}>
+        <Text style={[styles.familyInfoText, { color: primaryColor }]}>
+          Total families: {sortedFamilies.length}
+          {selectedFamily ? ` | Editing: ${selectedFamily.name}` : ""}
+        </Text>
+      </View>
+
+      <Text style={styles.label}>Family Name</Text>
+      <TextInput
+        value={formState.name}
+        onChangeText={(text) => setFormState((previous) => ({ ...previous, name: text }))}
+        style={styles.input}
+        placeholder="Johnson"
+      />
+
+      <Text style={styles.label}>Motto (optional)</Text>
+      <TextInput
+        value={formState.motto}
+        onChangeText={(text) => setFormState((previous) => ({ ...previous, motto: text }))}
+        style={styles.input}
+        placeholder="Together we grow"
+      />
+
+      <Text style={styles.label}>Description (optional)</Text>
+      <TextInput
+        value={formState.description}
+        onChangeText={(text) => setFormState((previous) => ({ ...previous, description: text }))}
+        style={[styles.input, styles.multilineInput]}
+        multiline
+        placeholder="Family background, history, and notes..."
+      />
+
+      <View style={styles.actionRow}>
+        <Pressable
+          style={[styles.primaryButton, { backgroundColor: primaryColor }]}
+          onPress={() => void saveFamily()}
+          disabled={isMutating}
+        >
+          <Text style={styles.primaryButtonText}>{selectedFamily ? "Update Family" : "Add Family"}</Text>
+        </Pressable>
+
+        {selectedFamily ? (
+          <Pressable style={styles.secondaryDangerButton} onPress={() => void removeFamily()} disabled={isMutating}>
+            <Text style={styles.secondaryDangerButtonText}>Delete</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -3417,6 +3647,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     backgroundColor: "#ffffff",
+  },
+  familyInfoCard: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  familyInfoText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   subsectionTitle: {
     marginTop: 12,

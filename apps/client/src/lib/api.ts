@@ -1,5 +1,7 @@
 import {
+  Family,
   FamilyGraph,
+  FamilyInput,
   ParentChildInput,
   Person,
   PersonInput,
@@ -48,6 +50,25 @@ export const createPerson = (payload: PersonInput) =>
     body: JSON.stringify(payload),
   });
 
+export const getFamilies = () => request<Family[]>("/api/families");
+
+export const createFamily = (payload: FamilyInput) =>
+  request<Family>("/api/families", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const updateFamily = (familyId: string, payload: FamilyInput) =>
+  request<Family>(`/api/families/${familyId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+export const deleteFamily = (familyId: string) =>
+  request<void>(`/api/families/${familyId}`, {
+    method: "DELETE",
+  });
+
 export const updatePerson = (personId: string, payload: PersonInput) =>
   request<Person>(`/api/persons/${personId}`, {
     method: "PUT",
@@ -88,7 +109,7 @@ export const deleteSpouseRelation = (personAId: string, personBId: string) =>
   );
 
 export type UiSettingsPayload = {
-  activeTab: "TREE" | "MEMBERS" | "RELATIONSHIPS";
+  activeTab: "TREE" | "MEMBERS" | "RELATIONSHIPS" | "FAMILIES";
   activePage: "HOME" | "SETTINGS";
   selectedThemeId: "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
   primaryColorInput: string;

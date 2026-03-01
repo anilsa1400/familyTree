@@ -34,9 +34,18 @@ export type SpouseRelationRecord = {
   created_at: string;
 };
 
+export type FamilyRecord = {
+  id: string;
+  name: string;
+  motto: string | null;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type UiSettingsRecord = {
   id: number;
-  active_tab: "TREE" | "MEMBERS" | "RELATIONSHIPS";
+  active_tab: "TREE" | "MEMBERS" | "RELATIONSHIPS" | "FAMILIES";
   active_page: "HOME" | "SETTINGS";
   selected_theme_id: "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
   primary_color_input: string;

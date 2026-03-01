@@ -4,6 +4,7 @@ import express from "express";
 import { ZodError } from "zod";
 import { db } from "./db";
 import {
+  familyInputSchema,
   deleteParentChildSchema,
   deleteSpouseSchema,
   parentChildInputSchema,
@@ -13,11 +14,13 @@ import {
 } from "./schema";
 import {
   FamilyGraph,
+  serializeFamily,
   serializeParentChild,
   serializePerson,
   serializeSpouseRelation,
 } from "./tree";
 import {
+  FamilyRecord,
   ParentChildRelationRecord,
   PersonRecord,
   SpouseRelationRecord,
@@ -34,17 +37,21 @@ app.use(express.json());
 const nowIso = () => new Date().toISOString();
 
 const findPersonById = db.prepare("SELECT * FROM persons WHERE id = ?");
+const findFamilyById = db.prepare("SELECT * FROM families WHERE id = ?");
 const getPersons = db.prepare("SELECT * FROM persons ORDER BY first_name ASC, last_name ASC");
 const getParentChildRelations = db.prepare("SELECT * FROM parent_child_relations ORDER BY created_at ASC");
 const getSpouseRelations = db.prepare("SELECT * FROM spouse_relations ORDER BY created_at ASC");
+const getFamilies = db.prepare("SELECT * FROM families ORDER BY name ASC");
 const getUiSettings = db.prepare("SELECT * FROM ui_settings WHERE id = 1");
 
 const buildFamilyGraph = (): FamilyGraph => {
+  const families = getFamilies.all() as FamilyRecord[];
   const persons = getPersons.all() as PersonRecord[];
   const parentChildRelations = getParentChildRelations.all() as ParentChildRelationRecord[];
   const spouseRelations = getSpouseRelations.all() as SpouseRelationRecord[];
 
   return {
+    families: families.map(serializeFamily),
     persons: persons.map(serializePerson),
     parentChildRelations: parentChildRelations.map(serializeParentChild),
     spouseRelations: spouseRelations.map(serializeSpouseRelation),
@@ -105,6 +112,92 @@ app.get("/health", (_req, res) => {
 app.get("/api/tree", (_req, res, next) => {
   try {
     res.json(buildFamilyGraph());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/families", (_req, res, next) => {
+  try {
+    const families = getFamilies.all() as FamilyRecord[];
+    res.json(families.map(serializeFamily));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/families", (req, res, next) => {
+  try {
+    const payload = familyInputSchema.parse(req.body);
+    const id = randomUUID();
+    const timestamp = nowIso();
+
+    db.prepare(
+      `INSERT INTO families (
+         id,
+         name,
+         motto,
+         description,
+         created_at,
+         updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      payload.name,
+      payload.motto?.trim() || null,
+      payload.description?.trim() || null,
+      timestamp,
+      timestamp,
+    );
+
+    const family = findFamilyById.get(id) as FamilyRecord;
+    res.status(201).json(serializeFamily(family));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/families/:id", (req, res, next) => {
+  try {
+    const payload = familyInputSchema.parse(req.body);
+    const result = db
+      .prepare(
+        `UPDATE families
+         SET name = ?,
+             motto = ?,
+             description = ?,
+             updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        payload.name,
+        payload.motto?.trim() || null,
+        payload.description?.trim() || null,
+        nowIso(),
+        req.params.id,
+      );
+
+    if (result.changes === 0) {
+      res.status(404).json({ message: "Requested record was not found." });
+      return;
+    }
+
+    const family = findFamilyById.get(req.params.id) as FamilyRecord;
+    res.json(serializeFamily(family));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/families/:id", (req, res, next) => {
+  try {
+    const result = db.prepare("DELETE FROM families WHERE id = ?").run(req.params.id);
+    if (result.changes === 0) {
+      res.status(404).json({ message: "Requested record was not found." });
+      return;
+    }
+
+    res.status(204).send();
   } catch (error) {
     next(error);
   }
@@ -403,7 +496,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 
   if (isSqliteConstraintError(error)) {
     if (error.message.includes("UNIQUE")) {
-      res.status(409).json({ message: "That relationship already exists." });
+      res.status(409).json({ message: "That record already exists." });
       return;
     }
 

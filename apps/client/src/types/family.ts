@@ -32,7 +32,17 @@ export type SpouseRelation = {
   createdAt: string;
 };
 
+export type Family = {
+  id: string;
+  name: string;
+  motto: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FamilyGraph = {
+  families: Family[];
   persons: Person[];
   parentChildRelations: ParentChildRelation[];
   spouseRelations: SpouseRelation[];
@@ -59,4 +69,10 @@ export type SpouseInput = {
   personBId: string;
   marriedAt?: string | null;
   divorcedAt?: string | null;
+};
+
+export type FamilyInput = {
+  name: string;
+  motto?: string | null;
+  description?: string | null;
 };

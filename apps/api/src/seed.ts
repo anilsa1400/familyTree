@@ -3,6 +3,15 @@ import { db } from "./db";
 
 const timestamp = () => new Date().toISOString();
 
+const createFamily = (name: string, motto: string | null = null, description: string | null = null) => {
+  const id = randomUUID();
+  const now = timestamp();
+  db.prepare(
+    `INSERT INTO families (id, name, motto, description, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(id, name, motto, description, now, now);
+};
+
 const createPerson = (firstName: string, lastName: string, gender: string, dateOfBirth: string) => {
   const id = randomUUID();
   const now = timestamp();
@@ -65,9 +74,14 @@ type DescendantStep = {
 };
 
 const run = () => {
+  db.prepare("DELETE FROM families").run();
   db.prepare("DELETE FROM spouse_relations").run();
   db.prepare("DELETE FROM parent_child_relations").run();
   db.prepare("DELETE FROM persons").run();
+
+  ["Johnson", "Clark", "Patel", "Kim", "Chen", "Reed", "Blake", "Turner", "Walker"].forEach((familyName) => {
+    createFamily(familyName, null, `${familyName} family profile`);
+  });
 
   const robertId = createPerson("Robert", "Johnson", "MALE", "1960-05-10T00:00:00.000Z");
   const annaId = createPerson("Anna", "Johnson", "FEMALE", "1963-09-04T00:00:00.000Z");

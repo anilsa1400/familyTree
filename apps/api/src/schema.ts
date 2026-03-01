@@ -30,6 +30,12 @@ export const spouseInputSchema = z.object({
   divorcedAt: isoDate.optional().nullable(),
 });
 
+export const familyInputSchema = z.object({
+  name: z.string().trim().min(1, "Family name is required").max(120),
+  motto: z.string().trim().max(250).optional().nullable(),
+  description: z.string().trim().max(3000).optional().nullable(),
+});
+
 export const deleteParentChildSchema = z.object({
   parentId: z.string().trim().min(1),
   childId: z.string().trim().min(1),
@@ -43,7 +49,7 @@ export const deleteSpouseSchema = z.object({
 const hexColor = z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/);
 
 export const uiSettingsInputSchema = z.object({
-  activeTab: z.enum(["TREE", "MEMBERS", "RELATIONSHIPS"]),
+  activeTab: z.enum(["TREE", "MEMBERS", "RELATIONSHIPS", "FAMILIES"]),
   activePage: z.enum(["HOME", "SETTINGS"]),
   selectedThemeId: z.enum(["FOREST", "OCEAN", "SUNSET", "GRAPHITE"]),
   primaryColorInput: hexColor,
@@ -56,4 +62,5 @@ export const uiSettingsInputSchema = z.object({
 export type PersonInput = z.infer<typeof personInputSchema>;
 export type ParentChildInput = z.infer<typeof parentChildInputSchema>;
 export type SpouseInput = z.infer<typeof spouseInputSchema>;
+export type FamilyInput = z.infer<typeof familyInputSchema>;
 export type UiSettingsInput = z.infer<typeof uiSettingsInputSchema>;

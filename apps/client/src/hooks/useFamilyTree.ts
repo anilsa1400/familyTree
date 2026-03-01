@@ -1,17 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  createFamily,
   createParentChildRelation,
   createPerson,
   createSpouseRelation,
+  deleteFamily,
   deleteParentChildRelation,
   deletePerson,
   deleteSpouseRelation,
   getFamilyGraph,
+  updateFamily,
   updatePerson,
 } from "../lib/api";
-import { FamilyGraph, ParentChildInput, PersonInput, SpouseInput } from "../types/family";
+import {
+  FamilyGraph,
+  FamilyInput,
+  ParentChildInput,
+  PersonInput,
+  SpouseInput,
+} from "../types/family";
 
 const emptyGraph: FamilyGraph = {
+  families: [],
   persons: [],
   parentChildRelations: [],
   spouseRelations: [],
@@ -27,7 +37,12 @@ export const useFamilyTree = () => {
     setIsLoading(true);
     try {
       const data = await getFamilyGraph();
-      setGraph(data);
+      setGraph({
+        families: Array.isArray(data.families) ? data.families : [],
+        persons: Array.isArray(data.persons) ? data.persons : [],
+        parentChildRelations: Array.isArray(data.parentChildRelations) ? data.parentChildRelations : [],
+        spouseRelations: Array.isArray(data.spouseRelations) ? data.spouseRelations : [],
+      });
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load family graph");
@@ -95,6 +110,21 @@ export const useFamilyTree = () => {
     deleteSpouse: async (personAId: string, personBId: string) => {
       await wrapMutation(async () => {
         await deleteSpouseRelation(personAId, personBId);
+      });
+    },
+    createFamily: async (payload: FamilyInput) => {
+      await wrapMutation(async () => {
+        await createFamily(payload);
+      });
+    },
+    updateFamily: async (familyId: string, payload: FamilyInput) => {
+      await wrapMutation(async () => {
+        await updateFamily(familyId, payload);
+      });
+    },
+    deleteFamily: async (familyId: string) => {
+      await wrapMutation(async () => {
+        await deleteFamily(familyId);
       });
     },
   };
