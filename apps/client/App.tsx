@@ -1,11 +1,9 @@
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import { createElement, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Modal,
-  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -18,6 +16,10 @@ import {
 } from "react-native";
 import { useFamilyTree } from "./src/hooks/useFamilyTree";
 import { API_BASE_URL, getUiSettings, UiSettingsPayload, updateUiSettings } from "./src/lib/api";
+import { MemberDetailsCard } from "./src/components/members/MemberDetailsCard";
+import { ColorPickerField } from "./src/components/settings/ColorPickerField";
+import { SectionRefreshButton, SectionViewModeToggle, SettingsToggle } from "./src/components/common/SectionControls";
+import { FamilyFilterSelector } from "./src/components/common/FamilyFilterSelector";
 import {
   Family,
   FamilyGraph,
@@ -92,22 +94,6 @@ const themePresets: ThemePreset[] = [
     primaryColor: "#3a4552",
     secondaryColor: "#dce2e8",
   },
-];
-
-const basicColorPickerPalette = [
-  "#2e5f4f",
-  "#1e5d8c",
-  "#a24d2f",
-  "#3a4552",
-  "#2a9d8f",
-  "#fb8500",
-  "#5e548e",
-  "#ef476f",
-  "#ffd166",
-  "#06d6a0",
-  "#118ab2",
-  "#ffffff",
-  "#000000",
 ];
 
 const isHexColor = (value: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(value.trim());
@@ -322,6 +308,25 @@ const formatDate = (value: string | null) => {
   }
 
   return value.slice(0, 10);
+};
+
+const memberLifeLabel = (person: Person) => {
+  const birthDate = formatDate(person.dateOfBirth);
+  const deathDate = formatDate(person.dateOfDeath);
+
+  if (birthDate && deathDate) {
+    return `${birthDate} - ${deathDate}`;
+  }
+
+  if (birthDate) {
+    return `Born ${birthDate}`;
+  }
+
+  if (deathDate) {
+    return `Died ${deathDate}`;
+  }
+
+  return "Dates not set";
 };
 
 const toNullable = (value: string) => {
@@ -1185,83 +1190,6 @@ type SettingsPageProps = {
   onToggleShowMemberPhotos: () => void;
 };
 
-type ColorPickerFieldProps = {
-  label: string;
-  selectedColor: string;
-  onSelectColor: (value: string) => void;
-};
-
-const toHexSix = (value: string) => {
-  const trimmed = value.trim();
-  if (/^#[0-9A-Fa-f]{6}$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (/^#[0-9A-Fa-f]{3}$/.test(trimmed)) {
-    const [red, green, blue] = trimmed.slice(1).split("");
-    return `#${red}${red}${green}${green}${blue}${blue}`;
-  }
-
-  return "#2e5f4f";
-};
-
-const ColorPickerField = ({ label, selectedColor, onSelectColor }: ColorPickerFieldProps) => {
-  const webColorInputValue = toHexSix(selectedColor);
-  const isWeb = Platform.OS === "web";
-
-  return (
-    <View style={styles.colorPickerBlock}>
-      <View style={styles.colorPickerHeaderRow}>
-        <Text style={styles.label}>{label}</Text>
-        <View style={styles.colorPickerValueChip}>
-          <View style={[styles.colorPickerValueDot, { backgroundColor: selectedColor }]} />
-          <Text style={styles.colorPickerValueText}>{selectedColor.toUpperCase()}</Text>
-        </View>
-      </View>
-
-      <View style={styles.colorPickerControlRow}>
-        {isWeb ? (
-          <View style={styles.webColorPickerFrame}>
-            {createElement("input", {
-              type: "color",
-              value: webColorInputValue,
-              onChange: (event: { target?: { value?: string } }) => {
-                const value = event.target?.value;
-                if (value) {
-                  onSelectColor(value);
-                }
-              },
-              style: {
-                width: 42,
-                height: 32,
-                border: "none",
-                background: "transparent",
-                padding: 0,
-                cursor: "pointer",
-              },
-            })}
-          </View>
-        ) : (
-          <View style={styles.basicPaletteRow}>
-            {basicColorPickerPalette.map((colorValue) => {
-              const isSelected = selectedColor.trim().toLowerCase() === colorValue.toLowerCase();
-              return (
-                <Pressable
-                  key={`${label}-fallback-${colorValue}`}
-                  style={[styles.basicPaletteSwatchButton, isSelected && styles.basicPaletteSwatchButtonActive]}
-                  onPress={() => onSelectColor(colorValue)}
-                >
-                  <View style={[styles.basicPaletteSwatch, { backgroundColor: colorValue }]} />
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-      </View>
-    </View>
-  );
-};
-
 const SettingsPage = ({
   selectedThemeId,
   themeEditorMode,
@@ -1433,193 +1361,6 @@ const SettingsPage = ({
         />
       </View>
     </ScrollView>
-  );
-};
-
-type SettingsToggleProps = {
-  label: string;
-  value: boolean;
-  accentColor: string;
-  onPress: () => void;
-};
-
-const SettingsToggle = ({ label, value, accentColor, onPress }: SettingsToggleProps) => (
-  <Pressable
-    style={[
-      styles.settingsToggleRow,
-      { borderColor: accentColor },
-      value && { backgroundColor: `${accentColor}22` },
-      styles.shadowSoft,
-    ]}
-    onPress={onPress}
-  >
-    <Text style={styles.settingsToggleLabel}>{label}</Text>
-    <View
-      style={[
-        styles.settingsToggleValuePill,
-        { borderColor: accentColor },
-        value && { backgroundColor: accentColor, borderColor: accentColor },
-      ]}
-    >
-      <Text style={[styles.settingsToggleValueText, value && { color: "#ffffff" }]}>{value ? "ON" : "OFF"}</Text>
-    </View>
-  </Pressable>
-);
-
-type SectionRefreshButtonProps = {
-  primaryColor: string;
-  isRefreshing: boolean;
-  onRefresh: () => Promise<void>;
-};
-
-const SectionRefreshButton = ({ primaryColor, isRefreshing, onRefresh }: SectionRefreshButtonProps) => (
-  <Pressable
-    style={[styles.refreshButton, { backgroundColor: primaryColor }, styles.shadowSoft]}
-    onPress={() => void onRefresh()}
-    disabled={isRefreshing}
-  >
-    {isRefreshing ? (
-      <ActivityIndicator size="small" color="#ffffff" />
-    ) : (
-      <Ionicons name="refresh-outline" size={16} color="#ffffff" />
-    )}
-    <Text style={styles.refreshButtonText}>{isRefreshing ? "Refreshing..." : "Refresh"}</Text>
-  </Pressable>
-);
-
-type SectionViewModeToggleProps = {
-  primaryColor: string;
-  viewMode: SectionViewMode;
-  onToggle: () => void;
-};
-
-const SectionViewModeToggle = ({ primaryColor, viewMode, onToggle }: SectionViewModeToggleProps) => {
-  const isTile = viewMode === "TILE";
-
-  return (
-    <Pressable
-      style={[styles.sectionModeButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowSoft]}
-      onPress={onToggle}
-    >
-      <Ionicons name={isTile ? "grid-outline" : "list-outline"} size={15} color={primaryColor} />
-      <Text style={[styles.sectionModeButtonText, { color: primaryColor }]}>{isTile ? "Tile" : "List"}</Text>
-    </Pressable>
-  );
-};
-
-type FamilyFilterSelectorProps = {
-  familyNames: string[];
-  selectedFamilyName: string | null;
-  primaryColor: string;
-  onSelectFamily: (familyName: string) => void;
-};
-
-const FamilyFilterSelector = ({
-  familyNames,
-  selectedFamilyName,
-  primaryColor,
-  onSelectFamily,
-}: FamilyFilterSelectorProps) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  if (familyNames.length === 0) {
-    return null;
-  }
-
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-  const filteredFamilyNames = normalizedQuery
-    ? familyNames.filter((familyName) => familyName.toLowerCase().includes(normalizedQuery))
-    : familyNames;
-  const selectedLabel = selectedFamilyName ?? "Select family";
-
-  return (
-    <View style={styles.familyFilterBlock}>
-      <Text style={styles.familyFilterLabel}>Viewing Family</Text>
-      <View style={styles.familyDropdownContainer}>
-        <Pressable
-          style={[styles.familyDropdownTrigger, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowSoft]}
-          onPress={() => {
-            setSearchQuery("");
-            setIsOpen(true);
-          }}
-        >
-          <Text style={[styles.familyDropdownTriggerText, { color: primaryColor }]} numberOfLines={1}>
-            {selectedLabel}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={primaryColor} />
-        </Pressable>
-
-        <Modal
-          transparent
-          animationType="fade"
-          visible={isOpen}
-          onRequestClose={() => {
-            setIsOpen(false);
-            setSearchQuery("");
-          }}
-        >
-          <View style={styles.familyDropdownOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => {
-                setIsOpen(false);
-                setSearchQuery("");
-              }}
-            />
-            <View style={[styles.familyDropdownMenu, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowStrong]}>
-              <View style={styles.familyDropdownHeaderRow}>
-                <Text style={[styles.familyDropdownTitle, { color: primaryColor }]}>Select Family</Text>
-                <Pressable
-                  style={[styles.familyDropdownCloseButton, { borderColor: primaryColor }]}
-                  onPress={() => {
-                    setIsOpen(false);
-                    setSearchQuery("");
-                  }}
-                >
-                  <Ionicons name="close" size={15} color={primaryColor} />
-                </Pressable>
-              </View>
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search family..."
-                autoCapitalize="none"
-                autoFocus
-                style={[styles.familyDropdownSearchInput, { borderColor: primaryColor }]}
-              />
-              <ScrollView style={styles.familyDropdownList} nestedScrollEnabled>
-                {filteredFamilyNames.length > 0 ? (
-                  filteredFamilyNames.map((familyName) => {
-                    const isSelected = selectedFamilyName === familyName;
-                    return (
-                      <Pressable
-                        key={`family-dropdown-option-${familyName}`}
-                        style={[
-                          styles.familyDropdownOption,
-                          { borderColor: primaryColor },
-                          isSelected && { backgroundColor: `${primaryColor}1f` },
-                        ]}
-                        onPress={() => {
-                          onSelectFamily(familyName);
-                          setIsOpen(false);
-                          setSearchQuery("");
-                        }}
-                      >
-                        <Text style={[styles.familyDropdownOptionText, { color: primaryColor }]}>{familyName}</Text>
-                        {isSelected ? <Ionicons name="checkmark" size={15} color={primaryColor} /> : null}
-                      </Pressable>
-                    );
-                  })
-                ) : (
-                  <Text style={styles.familyDropdownNoResults}>No matching family found.</Text>
-                )}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-      </View>
-    </View>
   );
 };
 
@@ -1806,108 +1547,6 @@ const FamiliesPanel = ({
         ) : null}
       </View>
     </View>
-  );
-};
-
-type MemberDetailsCardProps = {
-  person: Person;
-  familyName: string;
-  primaryColor: string;
-  secondaryColor: string;
-  showMemberPhotos: boolean;
-  isSelected: boolean;
-  cardWidth: number | "100%";
-  onPress: () => void;
-};
-
-const memberInitials = (person: Person) => {
-  const first = person.firstName.trim().charAt(0).toUpperCase();
-  const last = person.lastName.trim().charAt(0).toUpperCase();
-  const initials = `${first}${last}`.trim();
-  return initials || "M";
-};
-
-const memberLifeLabel = (person: Person) => {
-  const birthDate = formatDate(person.dateOfBirth);
-  const deathDate = formatDate(person.dateOfDeath);
-
-  if (birthDate && deathDate) {
-    return `${birthDate} - ${deathDate}`;
-  }
-
-  if (birthDate) {
-    return `Born ${birthDate}`;
-  }
-
-  if (deathDate) {
-    return `Died ${deathDate}`;
-  }
-
-  return "Dates not set";
-};
-
-const MemberDetailsCard = ({
-  person,
-  familyName,
-  primaryColor,
-  secondaryColor,
-  showMemberPhotos,
-  isSelected,
-  cardWidth,
-  onPress,
-}: MemberDetailsCardProps) => {
-  const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
-  const notesPreview = person.notes?.trim() || "No notes provided.";
-  const imageUrl = person.photoUrl?.trim();
-  const hasPhoto = showMemberPhotos && Boolean(imageUrl);
-
-  return (
-    <Pressable
-      style={[
-        styles.memberDetailCard,
-        { width: cardWidth, borderColor: primaryColor },
-        isSelected
-          ? { borderColor: primaryColor, backgroundColor: `${primaryColor}1a` }
-          : { backgroundColor: "#ffffff" },
-        styles.shadowSoft,
-      ]}
-      onPress={onPress}
-    >
-      <View style={styles.memberDetailHeaderRow}>
-        {hasPhoto ? (
-          <Image source={{ uri: imageUrl }} style={[styles.memberDetailAvatar, { borderColor: primaryColor }]} />
-        ) : (
-          <View style={[styles.memberDetailAvatarFallback, { borderColor: primaryColor }]}>
-            <Text style={[styles.memberDetailAvatarInitials, { color: primaryColor }]}>{memberInitials(person)}</Text>
-          </View>
-        )}
-
-        <View style={styles.memberDetailHeaderText}>
-          <Text style={styles.memberDetailName} numberOfLines={2}>
-            {displayName(person)}
-          </Text>
-          <Text style={styles.memberDetailFamily} numberOfLines={1}>
-            {familyName} Family
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.memberDetailTagRow}>
-        <View style={[styles.memberDetailTag, { borderColor: primaryColor, backgroundColor: `${secondaryColor}` }]}>
-          <Text style={[styles.memberDetailTagText, { color: primaryColor }]}>{genderLabel}</Text>
-        </View>
-        {person.dateOfDeath ? (
-          <View style={styles.memberDetailStatusTag}>
-            <Text style={styles.memberDetailStatusTagText}>RIP</Text>
-          </View>
-        ) : null}
-      </View>
-
-      <Text style={styles.memberDetailMetaLine}>{memberLifeLabel(person)}</Text>
-      <Text style={styles.memberDetailNotes} numberOfLines={3}>
-        {notesPreview}
-      </Text>
-    </Pressable>
   );
 };
 
@@ -3785,19 +3424,6 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: "#ffffff",
   },
-  refreshButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: "#14332a",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  refreshButtonText: {
-    color: "#ffffff",
-    fontWeight: "600",
-  },
   content: {
     paddingBottom: 80,
   },
@@ -3847,102 +3473,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 12,
     color: "#517467",
-  },
-  familyFilterBlock: {
-    marginBottom: 10,
-  },
-  familyFilterLabel: {
-    marginBottom: 4,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#1f4b3d",
-  },
-  familyDropdownContainer: {
-    position: "relative",
-    zIndex: 12,
-  },
-  familyDropdownTrigger: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  familyDropdownTriggerText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    marginRight: 8,
-  },
-  familyDropdownMenu: {
-    width: "100%",
-    maxWidth: 420,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    maxHeight: "80%",
-  },
-  familyDropdownOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(16, 28, 22, 0.34)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  familyDropdownHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    gap: 8,
-  },
-  familyDropdownTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  familyDropdownCloseButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
-  familyDropdownSearchInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    marginBottom: 8,
-    fontSize: 13,
-  },
-  familyDropdownList: {
-    maxHeight: 180,
-  },
-  familyDropdownOption: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginBottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#ffffff",
-  },
-  familyDropdownOptionText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  familyDropdownNoResults: {
-    paddingVertical: 8,
-    paddingHorizontal: 2,
-    fontSize: 12,
-    color: "#5f7d72",
-    fontWeight: "600",
   },
   memberFamilyBadge: {
     alignSelf: "flex-start",
@@ -4084,172 +3614,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 4,
   },
-  memberDetailCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    minHeight: 170,
-  },
-  memberDetailHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  memberDetailAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
-    backgroundColor: "#ffffff",
-  },
-  memberDetailAvatarFallback: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
-    backgroundColor: "#eef5f2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  memberDetailAvatarInitials: {
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
-  memberDetailHeaderText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  memberDetailName: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#1b2e29",
-    lineHeight: 18,
-  },
-  memberDetailFamily: {
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#3a5a4f",
-  },
-  memberDetailTagRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 8,
-    marginBottom: 6,
-  },
-  memberDetailTag: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-  },
-  memberDetailTagText: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "capitalize",
-  },
-  memberDetailStatusTag: {
-    borderRadius: 999,
-    backgroundColor: "#d43838",
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  memberDetailStatusTagText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-  memberDetailMetaLine: {
-    fontSize: 12,
-    color: "#355247",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  memberDetailNotes: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: "#49685d",
-    fontWeight: "500",
-  },
   label: {
     marginBottom: 4,
     fontWeight: "600",
     color: "#1f4b3d",
-  },
-  colorPickerBlock: {
-    marginBottom: 8,
-  },
-  colorPickerHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  colorPickerValueChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "#bfd1c9",
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: "#ffffff",
-  },
-  colorPickerValueDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#9db2a8",
-  },
-  colorPickerValueText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#1f4b3d",
-    letterSpacing: 0.4,
-  },
-  colorPickerControlRow: {
-    marginBottom: 8,
-  },
-  webColorPickerFrame: {
-    borderWidth: 1,
-    borderColor: "#c2d5cc",
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  basicPaletteRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  basicPaletteSwatchButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#b8ccc2",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  basicPaletteSwatchButtonActive: {
-    borderWidth: 2,
-    borderColor: "#1f4b3d",
-  },
-  basicPaletteSwatch: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: "#d2e2da",
   },
   input: {
     borderWidth: 1,
@@ -4284,35 +3652,6 @@ const styles = StyleSheet.create({
     color: "#2f4f43",
     fontSize: 12,
     fontWeight: "600",
-  },
-  settingsToggleRow: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#ffffff",
-  },
-  settingsToggleLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1f4b3d",
-  },
-  settingsToggleValuePill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    minWidth: 52,
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-  },
-  settingsToggleValueText: {
-    fontWeight: "700",
-    fontSize: 12,
-    color: "#2e5f4f",
   },
   multilineInput: {
     minHeight: 80,
@@ -4437,20 +3776,6 @@ const styles = StyleSheet.create({
   },
   treeHorizontalScrollContent: {
     paddingRight: 8,
-  },
-  sectionModeButton: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#ffffff",
-  },
-  sectionModeButtonText: {
-    fontSize: 12,
-    fontWeight: "700",
   },
   treeActionButton: {
     width: "100%",
