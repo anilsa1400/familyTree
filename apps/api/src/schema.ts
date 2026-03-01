@@ -48,8 +48,9 @@ export const uiSettingsInputSchema = z.object({
   selectedThemeId: z.enum(["FOREST", "OCEAN", "SUNSET", "GRAPHITE"]),
   primaryColorInput: hexColor,
   secondaryColorInput: hexColor,
-  showCustomizeToolbar: z.boolean(),
+  layoutMode: z.enum(["SIDEBAR", "TOOLBAR"]),
   sidebarEnabled: z.boolean(),
+  showMemberPhotos: z.boolean(),
 });
 
 export type PersonInput = z.infer<typeof personInputSchema>;

@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS ui_settings (
   secondary_color_input TEXT NOT NULL,
   show_customize_toolbar INTEGER NOT NULL,
   sidebar_enabled INTEGER NOT NULL,
+  layout_mode TEXT NOT NULL DEFAULT 'TOOLBAR',
+  show_member_photos INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL
 );
 
@@ -64,26 +66,51 @@ CREATE INDEX IF NOT EXISTS idx_parent_child_parent_id ON parent_child_relations(
 CREATE INDEX IF NOT EXISTS idx_parent_child_child_id ON parent_child_relations(child_id);
 CREATE INDEX IF NOT EXISTS idx_spouse_a_id ON spouse_relations(person_a_id);
 CREATE INDEX IF NOT EXISTS idx_spouse_b_id ON spouse_relations(person_b_id);
-
-INSERT OR IGNORE INTO ui_settings (
-  id,
-  active_tab,
-  active_page,
-  selected_theme_id,
-  primary_color_input,
-  secondary_color_input,
-  show_customize_toolbar,
-  sidebar_enabled,
-  updated_at
-) VALUES (
-  1,
-  'TREE',
-  'HOME',
-  'FOREST',
-  '#2e5f4f',
-  '#d9e6de',
-  1,
-  0,
-  CURRENT_TIMESTAMP
-);
 `);
+
+type TableInfoRow = {
+  name: string;
+};
+
+const tableInfo = db.prepare("PRAGMA table_info(ui_settings)").all() as TableInfoRow[];
+const hasColumn = (name: string) => tableInfo.some((column) => column.name === name);
+
+if (!hasColumn("layout_mode")) {
+  db.exec("ALTER TABLE ui_settings ADD COLUMN layout_mode TEXT NOT NULL DEFAULT 'TOOLBAR'");
+  db.exec(
+    `UPDATE ui_settings
+     SET layout_mode = CASE WHEN sidebar_enabled = 1 THEN 'SIDEBAR' ELSE 'TOOLBAR' END`,
+  );
+}
+
+if (!hasColumn("show_member_photos")) {
+  db.exec("ALTER TABLE ui_settings ADD COLUMN show_member_photos INTEGER NOT NULL DEFAULT 1");
+}
+
+db.exec(
+  `INSERT OR IGNORE INTO ui_settings (
+     id,
+     active_tab,
+     active_page,
+     selected_theme_id,
+     primary_color_input,
+     secondary_color_input,
+     show_customize_toolbar,
+     sidebar_enabled,
+     layout_mode,
+     show_member_photos,
+     updated_at
+   ) VALUES (
+     1,
+     'TREE',
+     'HOME',
+     'FOREST',
+     '#2e5f4f',
+     '#d9e6de',
+     1,
+     0,
+     'TOOLBAR',
+     1,
+     CURRENT_TIMESTAMP
+   )`,
+);

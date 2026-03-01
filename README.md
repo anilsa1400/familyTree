@@ -101,4 +101,4 @@ npm run db:seed
 - Parent-child creation prevents cycles.
 - Spouse links are normalized (A/B order) to avoid duplicates.
 - Deleting a person cascades to their relationships.
-- UI preferences (tab/page/theme/colors/layout toggles) are stored in SQLite and restored on restart.
+- UI preferences (page/tab/theme/colors/navigation mode/sidebar state/photo visibility) are stored in SQLite and restored on restart.

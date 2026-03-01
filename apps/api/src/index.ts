@@ -92,8 +92,9 @@ const serializeUiSettings = (settings: UiSettingsRecord) => ({
   selectedThemeId: settings.selected_theme_id,
   primaryColorInput: settings.primary_color_input,
   secondaryColorInput: settings.secondary_color_input,
-  showCustomizeToolbar: settings.show_customize_toolbar === 1,
+  layoutMode: settings.layout_mode,
   sidebarEnabled: settings.sidebar_enabled === 1,
+  showMemberPhotos: settings.show_member_photos === 1,
   updatedAt: settings.updated_at,
 });
 
@@ -134,8 +135,10 @@ app.put("/api/settings/ui", (req, res, next) => {
            selected_theme_id = ?,
            primary_color_input = ?,
            secondary_color_input = ?,
-           show_customize_toolbar = ?,
            sidebar_enabled = ?,
+           layout_mode = ?,
+           show_member_photos = ?,
+           show_customize_toolbar = ?,
            updated_at = ?
        WHERE id = 1`,
     ).run(
@@ -144,8 +147,10 @@ app.put("/api/settings/ui", (req, res, next) => {
       payload.selectedThemeId,
       payload.primaryColorInput,
       payload.secondaryColorInput,
-      payload.showCustomizeToolbar ? 1 : 0,
       payload.sidebarEnabled ? 1 : 0,
+      payload.layoutMode,
+      payload.showMemberPhotos ? 1 : 0,
+      payload.layoutMode === "TOOLBAR" ? 1 : 0,
       nowIso(),
     );
 

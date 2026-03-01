@@ -93,8 +93,9 @@ export type UiSettingsPayload = {
   selectedThemeId: "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
   primaryColorInput: string;
   secondaryColorInput: string;
-  showCustomizeToolbar: boolean;
+  layoutMode: "SIDEBAR" | "TOOLBAR";
   sidebarEnabled: boolean;
+  showMemberPhotos: boolean;
 };
 
 export type UiSettingsResponse = UiSettingsPayload & {

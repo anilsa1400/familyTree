@@ -43,5 +43,7 @@ export type UiSettingsRecord = {
   secondary_color_input: string;
   show_customize_toolbar: 0 | 1;
   sidebar_enabled: 0 | 1;
+  layout_mode: "SIDEBAR" | "TOOLBAR";
+  show_member_photos: 0 | 1;
   updated_at: string;
 };

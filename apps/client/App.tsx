@@ -3,7 +3,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -25,6 +27,10 @@ import {
 
 type TabKey = "TREE" | "MEMBERS" | "RELATIONSHIPS";
 type AppPage = "HOME" | "SETTINGS";
+type LayoutMode = "SIDEBAR" | "TOOLBAR";
+type ThemePresetId = "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
+
+const MAX_GENERATION_DEPTH = 10;
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "TREE", label: "Tree" },
@@ -40,8 +46,6 @@ const tabIconByKey: Record<TabKey, "git-branch-outline" | "people-outline" | "sw
 
 const genderOptions: (Gender | "")[] = ["", "MALE", "FEMALE", "NON_BINARY", "OTHER"];
 const parentTypeOptions: ParentType[] = ["BIOLOGICAL", "ADOPTIVE", "STEP", "GUARDIAN"];
-
-type ThemePresetId = "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
 
 type ThemePreset = {
   id: ThemePresetId;
@@ -84,7 +88,7 @@ const themePresets: ThemePreset[] = [
 
 const isHexColor = (value: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(value.trim());
 
-const uiPreferencesStorageKey = "family-tree-ui-preferences-v1";
+const uiPreferencesStorageKey = "family-tree-ui-preferences-v2";
 
 type UiPreferences = {
   activeTab: TabKey;
@@ -92,8 +96,9 @@ type UiPreferences = {
   selectedThemeId: ThemePresetId;
   primaryColorInput: string;
   secondaryColorInput: string;
-  showCustomizeToolbar: boolean;
+  layoutMode: LayoutMode;
   sidebarEnabled: boolean;
+  showMemberPhotos: boolean;
 };
 
 const isTabKey = (value: unknown): value is TabKey =>
@@ -104,6 +109,9 @@ const isAppPage = (value: unknown): value is AppPage =>
 
 const isThemePresetId = (value: unknown): value is ThemePresetId =>
   value === "FOREST" || value === "OCEAN" || value === "SUNSET" || value === "GRAPHITE";
+
+const isLayoutMode = (value: unknown): value is LayoutMode =>
+  value === "SIDEBAR" || value === "TOOLBAR";
 
 const tabSlugByKey: Record<TabKey, string> = {
   TREE: "tree",
@@ -181,9 +189,11 @@ const App = () => {
   const initialTheme = themePresets.find((preset) => preset.id === "FOREST") ?? themePresets[0];
   const [primaryColorInput, setPrimaryColorInput] = useState(initialTheme.primaryColor);
   const [secondaryColorInput, setSecondaryColorInput] = useState(initialTheme.secondaryColor);
-  const [showCustomizeToolbar, setShowCustomizeToolbar] = useState(true);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("TOOLBAR");
   const [sidebarEnabled, setSidebarEnabled] = useState(false);
+  const [showMemberPhotos, setShowMemberPhotos] = useState(true);
   const [showSidebarHoverToggle, setShowSidebarHoverToggle] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPreferencesHydrated, setIsPreferencesHydrated] = useState(false);
   const [isServerSettingsHydrated, setIsServerSettingsHydrated] = useState(false);
   const sidebarToggleHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -245,8 +255,9 @@ const App = () => {
     setSelectedThemeId(settings.selectedThemeId);
     setPrimaryColorInput(settings.primaryColorInput);
     setSecondaryColorInput(settings.secondaryColorInput);
-    setShowCustomizeToolbar(settings.showCustomizeToolbar);
+    setLayoutMode(settings.layoutMode);
     setSidebarEnabled(settings.sidebarEnabled);
+    setShowMemberPhotos(settings.showMemberPhotos);
   };
 
   useEffect(
@@ -289,12 +300,16 @@ const App = () => {
             setSecondaryColorInput(parsed.secondaryColorInput);
           }
 
-          if (typeof parsed.showCustomizeToolbar === "boolean") {
-            setShowCustomizeToolbar(parsed.showCustomizeToolbar);
+          if (isLayoutMode(parsed.layoutMode)) {
+            setLayoutMode(parsed.layoutMode);
           }
 
           if (typeof parsed.sidebarEnabled === "boolean") {
             setSidebarEnabled(parsed.sidebarEnabled);
+          }
+
+          if (typeof parsed.showMemberPhotos === "boolean") {
+            setShowMemberPhotos(parsed.showMemberPhotos);
           }
         }
       }
@@ -323,8 +338,9 @@ const App = () => {
           selectedThemeId: settings.selectedThemeId,
           primaryColorInput: settings.primaryColorInput,
           secondaryColorInput: settings.secondaryColorInput,
-          showCustomizeToolbar: settings.showCustomizeToolbar,
+          layoutMode: settings.layoutMode,
           sidebarEnabled: settings.sidebarEnabled,
+          showMemberPhotos: settings.showMemberPhotos,
         };
 
         applyUiSettings(payload);
@@ -364,8 +380,9 @@ const App = () => {
         selectedThemeId,
         primaryColorInput,
         secondaryColorInput,
-        showCustomizeToolbar,
+        layoutMode,
         sidebarEnabled,
+        showMemberPhotos,
       };
 
       window.localStorage.setItem(uiPreferencesStorageKey, JSON.stringify(preferences));
@@ -378,8 +395,9 @@ const App = () => {
     selectedThemeId,
     primaryColorInput,
     secondaryColorInput,
-    showCustomizeToolbar,
+    layoutMode,
     sidebarEnabled,
+    showMemberPhotos,
     isPreferencesHydrated,
   ]);
 
@@ -394,8 +412,9 @@ const App = () => {
       selectedThemeId,
       primaryColorInput,
       secondaryColorInput,
-      showCustomizeToolbar,
+      layoutMode,
       sidebarEnabled,
+      showMemberPhotos,
     };
 
     const serialized = JSON.stringify(payload);
@@ -426,8 +445,9 @@ const App = () => {
     selectedThemeId,
     primaryColorInput,
     secondaryColorInput,
-    showCustomizeToolbar,
+    layoutMode,
     sidebarEnabled,
+    showMemberPhotos,
     isPreferencesHydrated,
     isServerSettingsHydrated,
   ]);
@@ -509,6 +529,46 @@ const App = () => {
     deleteSpouse,
   } = useFamilyTree();
 
+  const homeHeaderByTab: Record<TabKey, { title: string; description: string }> = {
+    TREE: {
+      title: "Family Tree View",
+      description: `Visual lineage with expandable branches up to ${MAX_GENERATION_DEPTH} generations.`,
+    },
+    MEMBERS: {
+      title: "Members Directory",
+      description: "Create and manage family member profiles, details, and photos.",
+    },
+    RELATIONSHIPS: {
+      title: "Relationship Manager",
+      description: "Link members as parents, children, and spouses with clear relationship records.",
+    },
+  };
+
+  const pageHeader =
+    activePage === "SETTINGS"
+      ? {
+          title: "Workspace Settings",
+          description: "Choose navigation mode, theme colors, and profile display preferences.",
+        }
+      : homeHeaderByTab[activeTab];
+
+  const isSidebarMode = layoutMode === "SIDEBAR";
+  const hasGraphContent =
+    graph.persons.length > 0 || graph.parentChildRelations.length > 0 || graph.spouseRelations.length > 0;
+  const showInitialLoader = isLoading && !isRefreshing && !hasGraphContent;
+  const showRefreshIndicator = isRefreshing || (isLoading && hasGraphContent);
+  const isSidebarToggleVisible = !isWideLayout || !sidebarEnabled || showSidebarHoverToggle;
+  const showTopTabButtons = !(isSidebarMode && sidebarEnabled);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await reload();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: uiTheme.backgroundColor }]}>
       <StatusBar style="dark" />
@@ -525,6 +585,7 @@ const App = () => {
                 backgroundColor: uiTheme.secondaryColor,
                 borderColor: uiTheme.primaryColor,
               },
+              styles.shadowStrong,
             ]}
             onPress={() => setActivePage((previous) => (previous === "HOME" ? "SETTINGS" : "HOME"))}
           >
@@ -532,30 +593,44 @@ const App = () => {
           </Pressable>
         </View>
 
+        <View style={[styles.pageHeaderCard, { borderColor: uiTheme.panelBorderColor, backgroundColor: uiTheme.surfaceColor }, styles.shadowSoft]}>
+          <Text style={[styles.pageHeaderTitle, { color: uiTheme.primaryColor }]}>{pageHeader.title}</Text>
+          <Text style={[styles.pageHeaderDescription, { color: uiTheme.subtitleColor }]}>{pageHeader.description}</Text>
+        </View>
+
         {activePage === "SETTINGS" ? (
           <SettingsPage
             selectedThemeId={selectedThemeId}
             primaryColorInput={primaryColorInput}
             secondaryColorInput={secondaryColorInput}
-            showCustomizeToolbar={showCustomizeToolbar}
+            layoutMode={layoutMode}
             sidebarEnabled={sidebarEnabled}
+            showMemberPhotos={showMemberPhotos}
             resolvedPrimaryColor={resolvedPrimaryColor}
             resolvedSecondaryColor={resolvedSecondaryColor}
             onPresetSelect={applyThemePreset}
             onPrimaryColorChange={setPrimaryColorInput}
             onSecondaryColorChange={setSecondaryColorInput}
-            onToggleCustomizeToolbar={() => setShowCustomizeToolbar((previous) => !previous)}
+            onLayoutModeSelect={(mode) => {
+              setLayoutMode(mode);
+              if (mode === "SIDEBAR") {
+                setSidebarEnabled(true);
+              }
+            }}
             onToggleSidebar={() => setSidebarEnabled((previous) => !previous)}
+            onToggleShowMemberPhotos={() => setShowMemberPhotos((previous) => !previous)}
           />
         ) : (
           <View style={[styles.workspace, isWideLayout && styles.workspaceWide]}>
-            {sidebarEnabled || isWideLayout ? (
+            {isSidebarMode ? (
               <Pressable
                 style={[
                   styles.sidebar,
-                  !isWideLayout && styles.sidebarStacked,
                   !sidebarEnabled && isWideLayout && styles.sidebarCollapsed,
+                  !sidebarEnabled && !isWideLayout && styles.sidebarCollapsedMobile,
+                  !isWideLayout && styles.sidebarStacked,
                   { backgroundColor: uiTheme.secondaryColor, borderColor: uiTheme.primaryColor },
+                  styles.shadowSoft,
                 ]}
                 onHoverIn={revealSidebarToggle}
                 onHoverOut={hideSidebarToggleWithDelay}
@@ -564,9 +639,9 @@ const App = () => {
                   style={[
                     styles.sidebarHoverToggleButton,
                     { borderColor: uiTheme.primaryColor, backgroundColor: uiTheme.surfaceColor },
-                    !showSidebarHoverToggle && styles.sidebarHoverToggleButtonHidden,
+                    !isSidebarToggleVisible && styles.sidebarHoverToggleButtonHidden,
                   ]}
-                  pointerEvents={showSidebarHoverToggle ? "auto" : "none"}
+                  pointerEvents="auto"
                   onHoverIn={revealSidebarToggle}
                   onHoverOut={hideSidebarToggleWithDelay}
                   onPress={() => setSidebarEnabled((previous) => !previous)}
@@ -591,9 +666,15 @@ const App = () => {
                             borderColor: uiTheme.primaryColor,
                             backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
                           },
+                          styles.shadowSoft,
                         ]}
                         onPress={() => setActiveTab(tab.key)}
                       >
+                        <Ionicons
+                          name={tabIconByKey[tab.key]}
+                          size={15}
+                          color={activeTab === tab.key ? uiTheme.textOnPrimary : uiTheme.primaryColor}
+                        />
                         <Text
                           style={[
                             styles.sidebarNavButtonText,
@@ -612,8 +693,8 @@ const App = () => {
                   </>
                 ) : null}
 
-                {!sidebarEnabled && isWideLayout ? (
-                  <View style={styles.sidebarCollapsedTabs}>
+                {!sidebarEnabled ? (
+                  <View style={[styles.sidebarCollapsedTabs, !isWideLayout && styles.sidebarCollapsedTabsMobile]}>
                     {tabs.map((tab) => (
                       <Pressable
                         key={`collapsed-sidebar-${tab.key}`}
@@ -623,6 +704,7 @@ const App = () => {
                             borderColor: uiTheme.primaryColor,
                             backgroundColor: activeTab === tab.key ? uiTheme.primaryColor : uiTheme.surfaceColor,
                           },
+                          styles.shadowSoft,
                         ]}
                         onPress={() => setActiveTab(tab.key)}
                       >
@@ -639,8 +721,8 @@ const App = () => {
             ) : null}
 
             <View style={styles.mainWorkspace}>
-              {showCustomizeToolbar ? (
-                <View style={[styles.customizeToolbar, { borderColor: uiTheme.panelBorderColor }]}>
+              {!isSidebarMode ? (
+                <View style={[styles.customizeToolbar, { borderColor: uiTheme.panelBorderColor }, styles.shadowSoft]}>
                   <Text style={[styles.customizeToolbarTitle, { color: uiTheme.primaryColor }]}>Customize Toolbar</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbarThemesRow}>
                     {themePresets.map((preset) => (
@@ -652,6 +734,7 @@ const App = () => {
                             borderColor: uiTheme.primaryColor,
                             backgroundColor: selectedThemeId === preset.id ? uiTheme.primaryColor : uiTheme.surfaceColor,
                           },
+                          styles.shadowSoft,
                         ]}
                         onPress={() => applyThemePreset(preset.id)}
                       >
@@ -669,11 +752,10 @@ const App = () => {
                   <View style={styles.toolbarActionsRow}>
                     <Pressable
                       style={[styles.toolbarActionButton, { backgroundColor: uiTheme.primaryColor }]}
-                      onPress={() => setSidebarEnabled((previous) => !previous)}
+                      onPress={() => setActivePage("SETTINGS")}
                     >
-                      <Text style={styles.toolbarActionButtonText}>
-                        {sidebarEnabled ? "Hide Sidebar" : "Show Sidebar"}
-                      </Text>
+                      <Ionicons name="color-palette-outline" size={15} color={uiTheme.textOnPrimary} />
+                      <Text style={styles.toolbarActionButtonText}>Theme Settings</Text>
                     </Pressable>
                     <Pressable
                       style={[
@@ -682,6 +764,7 @@ const App = () => {
                       ]}
                       onPress={() => setActivePage("SETTINGS")}
                     >
+                      <Ionicons name="settings-outline" size={15} color={uiTheme.primaryColor} />
                       <Text style={[styles.toolbarActionButtonText, { color: uiTheme.primaryColor }]}>More Settings</Text>
                     </Pressable>
                   </View>
@@ -689,30 +772,35 @@ const App = () => {
               ) : null}
 
               <View style={styles.tabRow}>
-                {tabs.map((tab) => (
-                  <Pressable
-                    key={tab.key}
-                    style={[
-                      styles.tabButton,
-                      { backgroundColor: uiTheme.secondaryColor },
-                      activeTab === tab.key && { backgroundColor: uiTheme.primaryColor, borderColor: uiTheme.primaryColor },
-                    ]}
-                    onPress={() => setActiveTab(tab.key)}
-                  >
-                    <Text
-                      style={[
-                        styles.tabText,
-                        { color: uiTheme.primaryColor },
-                        activeTab === tab.key && { color: uiTheme.textOnPrimary },
-                      ]}
-                    >
-                      {tab.label}
-                    </Text>
-                  </Pressable>
-                ))}
-                <Pressable style={[styles.refreshButton, { backgroundColor: uiTheme.primaryColor }]} onPress={() => void reload()}>
-                  <Text style={styles.refreshButtonText}>Refresh</Text>
-                </Pressable>
+                {showTopTabButtons
+                  ? tabs.map((tab) => (
+                      <Pressable
+                        key={tab.key}
+                        style={[
+                          styles.tabButton,
+                          { backgroundColor: uiTheme.secondaryColor },
+                          activeTab === tab.key && { backgroundColor: uiTheme.primaryColor, borderColor: uiTheme.primaryColor },
+                          styles.shadowSoft,
+                        ]}
+                        onPress={() => setActiveTab(tab.key)}
+                      >
+                        <Ionicons
+                          name={tabIconByKey[tab.key]}
+                          size={16}
+                          color={activeTab === tab.key ? uiTheme.textOnPrimary : uiTheme.primaryColor}
+                        />
+                        <Text
+                          style={[
+                            styles.tabText,
+                            { color: uiTheme.primaryColor },
+                            activeTab === tab.key && { color: uiTheme.textOnPrimary },
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                      </Pressable>
+                    ))
+                  : null}
               </View>
 
               {error ? (
@@ -721,15 +809,39 @@ const App = () => {
                 </View>
               ) : null}
 
-              {isLoading ? (
+              {showInitialLoader ? (
                 <View style={styles.centered}>
                   <ActivityIndicator size="large" color={uiTheme.primaryColor} />
                   <Text style={styles.mutedText}>Loading family graph...</Text>
                 </View>
               ) : (
-                <ScrollView contentContainerStyle={styles.content}>
+                <ScrollView
+                  contentContainerStyle={styles.content}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={showRefreshIndicator}
+                      onRefresh={() => void handleRefresh()}
+                      colors={[uiTheme.primaryColor]}
+                      tintColor={uiTheme.primaryColor}
+                    />
+                  }
+                >
+                  {showRefreshIndicator ? (
+                    <View style={[styles.refreshIndicator, { borderColor: uiTheme.panelBorderColor }, styles.shadowSoft]}>
+                      <ActivityIndicator size="small" color={uiTheme.primaryColor} />
+                      <Text style={[styles.refreshIndicatorText, { color: uiTheme.primaryColor }]}>Syncing latest family data...</Text>
+                    </View>
+                  ) : null}
+
                   {activeTab === "TREE" ? (
-                    <TreePanel graph={graph} primaryColor={uiTheme.primaryColor} secondaryColor={uiTheme.secondaryColor} />
+                    <TreePanel
+                      graph={graph}
+                      primaryColor={uiTheme.primaryColor}
+                      secondaryColor={uiTheme.secondaryColor}
+                      showMemberPhotos={showMemberPhotos}
+                      onRefresh={handleRefresh}
+                      isRefreshing={showRefreshIndicator}
+                    />
                   ) : null}
 
                   {activeTab === "MEMBERS" ? (
@@ -741,6 +853,8 @@ const App = () => {
                       onCreate={createPerson}
                       onUpdate={updatePerson}
                       onDelete={deletePerson}
+                      onRefresh={handleRefresh}
+                      isRefreshing={showRefreshIndicator}
                     />
                   ) : null}
 
@@ -754,6 +868,8 @@ const App = () => {
                       onDeleteParentChild={deleteParentChild}
                       onCreateSpouse={createSpouse}
                       onDeleteSpouse={deleteSpouse}
+                      onRefresh={handleRefresh}
+                      isRefreshing={showRefreshIndicator}
                     />
                   ) : null}
                 </ScrollView>
@@ -770,33 +886,37 @@ type SettingsPageProps = {
   selectedThemeId: ThemePresetId;
   primaryColorInput: string;
   secondaryColorInput: string;
-  showCustomizeToolbar: boolean;
+  layoutMode: LayoutMode;
   sidebarEnabled: boolean;
+  showMemberPhotos: boolean;
   resolvedPrimaryColor: string;
   resolvedSecondaryColor: string;
   onPresetSelect: (presetId: ThemePresetId) => void;
   onPrimaryColorChange: (value: string) => void;
   onSecondaryColorChange: (value: string) => void;
-  onToggleCustomizeToolbar: () => void;
+  onLayoutModeSelect: (mode: LayoutMode) => void;
   onToggleSidebar: () => void;
+  onToggleShowMemberPhotos: () => void;
 };
 
 const SettingsPage = ({
   selectedThemeId,
   primaryColorInput,
   secondaryColorInput,
-  showCustomizeToolbar,
+  layoutMode,
   sidebarEnabled,
+  showMemberPhotos,
   resolvedPrimaryColor,
   resolvedSecondaryColor,
   onPresetSelect,
   onPrimaryColorChange,
   onSecondaryColorChange,
-  onToggleCustomizeToolbar,
+  onLayoutModeSelect,
   onToggleSidebar,
+  onToggleShowMemberPhotos,
 }: SettingsPageProps) => (
   <ScrollView contentContainerStyle={styles.content}>
-    <View style={styles.panel}>
+    <View style={[styles.panel, styles.shadowSoft]}>
       <Text style={styles.panelTitle}>Settings</Text>
       <Text style={styles.panelHint}>
         Select a theme, customize primary and secondary colors, and configure interface options.
@@ -858,15 +978,39 @@ const SettingsPage = ({
         <Text style={styles.settingsSwatchText}>Applied secondary: {resolvedSecondaryColor}</Text>
       </View>
 
-      <Text style={styles.subsectionTitle}>Layout Options</Text>
+      <Text style={styles.subsectionTitle}>Navigation</Text>
+      <View style={styles.optionRowWrap}>
+        {(["SIDEBAR", "TOOLBAR"] as LayoutMode[]).map((mode) => {
+          const isSelected = layoutMode === mode;
+          const label = mode === "SIDEBAR" ? "Sidebar" : "Toolbar";
+
+          return (
+            <Pressable
+              key={`layout-mode-${mode}`}
+              style={[
+                styles.optionButton,
+                { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
+                isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
+              ]}
+              onPress={() => onLayoutModeSelect(mode)}
+            >
+              <Text style={[styles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && styles.optionButtonTextActive]}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={styles.subsectionTitle}>Display Options</Text>
       <SettingsToggle
-        label="Show Customize Toolbar"
-        value={showCustomizeToolbar}
+        label="Show Member Photos"
+        value={showMemberPhotos}
         accentColor={resolvedPrimaryColor}
-        onPress={onToggleCustomizeToolbar}
+        onPress={onToggleShowMemberPhotos}
       />
       <SettingsToggle
-        label="Enable Sidebar"
+        label="Expand Sidebar (Sidebar mode)"
         value={sidebarEnabled}
         accentColor={resolvedPrimaryColor}
         onPress={onToggleSidebar}
@@ -884,7 +1028,12 @@ type SettingsToggleProps = {
 
 const SettingsToggle = ({ label, value, accentColor, onPress }: SettingsToggleProps) => (
   <Pressable
-    style={[styles.settingsToggleRow, { borderColor: accentColor }, value && { backgroundColor: `${accentColor}22` }]}
+    style={[
+      styles.settingsToggleRow,
+      { borderColor: accentColor },
+      value && { backgroundColor: `${accentColor}22` },
+      styles.shadowSoft,
+    ]}
     onPress={onPress}
   >
     <Text style={styles.settingsToggleLabel}>{label}</Text>
@@ -900,6 +1049,27 @@ const SettingsToggle = ({ label, value, accentColor, onPress }: SettingsTogglePr
   </Pressable>
 );
 
+type SectionRefreshButtonProps = {
+  primaryColor: string;
+  isRefreshing: boolean;
+  onRefresh: () => Promise<void>;
+};
+
+const SectionRefreshButton = ({ primaryColor, isRefreshing, onRefresh }: SectionRefreshButtonProps) => (
+  <Pressable
+    style={[styles.refreshButton, { backgroundColor: primaryColor }, styles.shadowSoft]}
+    onPress={() => void onRefresh()}
+    disabled={isRefreshing}
+  >
+    {isRefreshing ? (
+      <ActivityIndicator size="small" color="#ffffff" />
+    ) : (
+      <Ionicons name="refresh-outline" size={16} color="#ffffff" />
+    )}
+    <Text style={styles.refreshButtonText}>{isRefreshing ? "Refreshing..." : "Refresh"}</Text>
+  </Pressable>
+);
+
 type MembersPanelProps = {
   persons: Person[];
   isMutating: boolean;
@@ -908,6 +1078,8 @@ type MembersPanelProps = {
   onCreate: (payload: PersonInput) => Promise<void>;
   onUpdate: (personId: string, payload: PersonInput) => Promise<void>;
   onDelete: (personId: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  isRefreshing: boolean;
 };
 
 const MembersPanel = ({
@@ -918,6 +1090,8 @@ const MembersPanel = ({
   onCreate,
   onUpdate,
   onDelete,
+  onRefresh,
+  isRefreshing,
 }: MembersPanelProps) => {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [formState, setFormState] = useState<PersonFormState>(defaultFormState);
@@ -974,9 +1148,14 @@ const MembersPanel = ({
   };
 
   return (
-    <View style={styles.panel}>
-      <Text style={styles.panelTitle}>Members</Text>
-      <Text style={styles.panelHint}>Create, edit, and delete family members.</Text>
+    <View style={[styles.panel, styles.shadowSoft]}>
+      <View style={styles.panelHeaderRow}>
+        <View style={styles.panelHeaderTextBlock}>
+          <Text style={styles.panelTitle}>Members</Text>
+          <Text style={styles.panelHint}>Create, edit, and delete family members.</Text>
+        </View>
+        <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
+      </View>
 
       <Text style={styles.label}>Select Existing Member</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
@@ -1119,6 +1298,8 @@ type RelationshipsPanelProps = {
     divorcedAt?: string | null;
   }) => Promise<void>;
   onDeleteSpouse: (personAId: string, personBId: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  isRefreshing: boolean;
 };
 
 const RelationshipsPanel = ({
@@ -1130,6 +1311,8 @@ const RelationshipsPanel = ({
   onDeleteParentChild,
   onCreateSpouse,
   onDeleteSpouse,
+  onRefresh,
+  isRefreshing,
 }: RelationshipsPanelProps) => {
   const persons = useMemo(
     () => [...graph.persons].sort((a, b) => displayName(a).localeCompare(displayName(b))),
@@ -1186,9 +1369,14 @@ const RelationshipsPanel = ({
   };
 
   return (
-    <View style={styles.panel}>
-      <Text style={styles.panelTitle}>Relationships</Text>
-      <Text style={styles.panelHint}>Connect members as parent-child and spouses.</Text>
+    <View style={[styles.panel, styles.shadowSoft]}>
+      <View style={styles.panelHeaderRow}>
+        <View style={styles.panelHeaderTextBlock}>
+          <Text style={styles.panelTitle}>Relationships</Text>
+          <Text style={styles.panelHint}>Connect members as parent-child and spouses.</Text>
+        </View>
+        <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
+      </View>
 
       <Text style={styles.subsectionTitle}>Parent to Child</Text>
       <Text style={styles.label}>Parent</Text>
@@ -1379,6 +1567,9 @@ type TreePanelProps = {
   graph: FamilyGraph;
   primaryColor: string;
   secondaryColor: string;
+  showMemberPhotos: boolean;
+  onRefresh: () => Promise<void>;
+  isRefreshing: boolean;
 };
 
 type TreeRenderNode = {
@@ -1405,7 +1596,79 @@ const orderNodeByName = (
     : { personId: secondId, partnerId: firstId };
 };
 
-const TreePanel = ({ graph, primaryColor, secondaryColor }: TreePanelProps) => {
+type MemberPhotoProps = {
+  person: Person;
+  primaryColor: string;
+  size?: number;
+};
+
+const MemberPhoto = ({ person, primaryColor, size = 44 }: MemberPhotoProps) => {
+  const photoUrl = person.photoUrl?.trim();
+  const hasPhoto = Boolean(photoUrl);
+
+  if (hasPhoto) {
+    return (
+      <Image
+        source={{ uri: photoUrl }}
+        style={[
+          styles.memberPhoto,
+          {
+            width: size,
+            height: size,
+            borderColor: primaryColor,
+            borderRadius: size / 2,
+          },
+        ]}
+      />
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.memberPhotoFallback,
+        {
+          width: size,
+          height: size,
+          borderColor: primaryColor,
+          borderRadius: size / 2,
+        },
+      ]}
+    >
+      <Ionicons name="person-outline" size={Math.max(16, size * 0.45)} color={primaryColor} />
+    </View>
+  );
+};
+
+type TreePersonCardProps = {
+  person: Person;
+  primaryColor: string;
+  showMemberPhotos: boolean;
+  spouseNames?: string[];
+};
+
+const TreePersonCard = ({ person, primaryColor, showMemberPhotos, spouseNames = [] }: TreePersonCardProps) => (
+  <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }, styles.shadowSoft]}>
+    <View style={styles.treePersonHeaderRow}>
+      {showMemberPhotos ? <MemberPhoto person={person} primaryColor={primaryColor} /> : null}
+      <View style={styles.treePersonDetailColumn}>
+        <Text style={styles.treeName}>{displayName(person)}</Text>
+        {person.gender ? <Text style={styles.treeMeta}>Gender: {person.gender}</Text> : null}
+        {person.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(person.dateOfBirth)}</Text> : null}
+        {spouseNames.length > 0 ? <Text style={styles.treeMeta}>Spouse(s): {spouseNames.join(", ")}</Text> : null}
+      </View>
+    </View>
+  </View>
+);
+
+const TreePanel = ({
+  graph,
+  primaryColor,
+  secondaryColor,
+  showMemberPhotos,
+  onRefresh,
+  isRefreshing,
+}: TreePanelProps) => {
   const personById = useMemo(() => {
     const map = new Map<string, Person>();
     graph.persons.forEach((person) => map.set(person.id, person));
@@ -1531,15 +1794,25 @@ const TreePanel = ({ graph, primaryColor, secondaryColor }: TreePanelProps) => {
   };
 
   return (
-    <View style={styles.panel}>
-      <Text style={styles.panelTitle}>Family Tree</Text>
-      <Text style={styles.panelHint}>Tap a branch card to expand/collapse descendants.</Text>
+    <View style={[styles.panel, styles.shadowSoft]}>
+      <View style={styles.panelHeaderRow}>
+        <View style={styles.panelHeaderTextBlock}>
+          <Text style={styles.panelTitle}>Family Tree</Text>
+          <Text style={styles.panelHint}>
+            Tap a branch card to expand/collapse descendants. Depth is limited to {MAX_GENERATION_DEPTH} generations.
+          </Text>
+        </View>
+        <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
+      </View>
       <View style={styles.treePanelActions}>
-        <Pressable style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }]} onPress={expandAll}>
+        <Pressable
+          style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }, styles.shadowSoft]}
+          onPress={expandAll}
+        >
           <Text style={[styles.treeMiniButtonText, { color: primaryColor }]}>Expand all</Text>
         </Pressable>
         <Pressable
-          style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }]}
+          style={[styles.treeMiniButton, { borderColor: primaryColor, backgroundColor: secondaryColor }, styles.shadowSoft]}
           onPress={collapseAll}
         >
           <Text style={[styles.treeMiniButtonText, { color: primaryColor }]}>Collapse all</Text>
@@ -1563,6 +1836,7 @@ const TreePanel = ({ graph, primaryColor, secondaryColor }: TreePanelProps) => {
             collapsedNodeIds={collapsedNodeIds}
             primaryColor={primaryColor}
             secondaryColor={secondaryColor}
+            showMemberPhotos={showMemberPhotos}
             onToggle={toggleNode}
           />
         ))
@@ -1583,6 +1857,7 @@ type TreeNodeProps = {
   collapsedNodeIds: Set<string>;
   primaryColor: string;
   secondaryColor: string;
+  showMemberPhotos: boolean;
   onToggle: (personId: string, partnerId?: string) => void;
 };
 
@@ -1598,6 +1873,7 @@ const TreeNode = ({
   collapsedNodeIds,
   primaryColor,
   secondaryColor,
+  showMemberPhotos,
   onToggle,
 }: TreeNodeProps) => {
   const person = personById.get(personId);
@@ -1672,8 +1948,10 @@ const TreeNode = ({
 
   const spouseNames = Array.from(spouseNameSet).sort((a, b) => a.localeCompare(b));
   const hasChildren = childRenderNodes.length > 0;
+  const isDepthLimitReached = depth >= MAX_GENERATION_DEPTH - 1;
+  const canExpandChildren = hasChildren && !isDepthLimitReached;
   const isCollapsed = collapsedNodeIds.has(personId) || (partnerId ? collapsedNodeIds.has(partnerId) : false);
-  const isExpanded = hasChildren && !isCollapsed;
+  const isExpanded = canExpandChildren && !isCollapsed;
 
   return (
     <View style={[styles.treeNode, { marginLeft: depth * 14 }]}>
@@ -1682,12 +1960,15 @@ const TreeNode = ({
           styles.treeCard,
           hasChildren && styles.treeCardBranch,
           { borderColor: primaryColor, backgroundColor: secondaryColor },
+          styles.shadowSoft,
         ]}
-        onPress={hasChildren ? () => onToggle(personId, partnerId) : undefined}
+        onPress={canExpandChildren ? () => onToggle(personId, partnerId) : undefined}
       >
         <View style={styles.treeTitleRow}>
-          <Text style={[styles.treeBranchLabel, { color: primaryColor }]}>{partner ? "Parent Pair" : "Member"}</Text>
-          {hasChildren ? (
+          <Text style={[styles.treeBranchLabel, { color: primaryColor }]}>
+            {partner ? "Parent Pair" : "Member"} | Generation {depth + 1}
+          </Text>
+          {canExpandChildren ? (
             <Text style={[styles.treeToggle, { backgroundColor: primaryColor }]}>
               {isCollapsed ? `+ ${childRenderNodes.length}` : `- ${childRenderNodes.length}`}
             </Text>
@@ -1696,28 +1977,26 @@ const TreeNode = ({
 
         {partner ? (
           <View style={styles.treePairRow}>
-            <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
-              <Text style={styles.treeName}>{displayName(person)}</Text>
-              {person.gender ? <Text style={styles.treeMeta}>Gender: {person.gender}</Text> : null}
-              {person.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(person.dateOfBirth)}</Text> : null}
-            </View>
+            <TreePersonCard person={person} primaryColor={primaryColor} showMemberPhotos={showMemberPhotos} />
 
             <View style={[styles.treePairConnector, { borderTopColor: primaryColor }]} />
 
-            <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
-              <Text style={styles.treeName}>{displayName(partner)}</Text>
-              {partner.gender ? <Text style={styles.treeMeta}>Gender: {partner.gender}</Text> : null}
-              {partner.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(partner.dateOfBirth)}</Text> : null}
-            </View>
+            <TreePersonCard person={partner} primaryColor={primaryColor} showMemberPhotos={showMemberPhotos} />
           </View>
         ) : (
-          <View style={[styles.treePersonTile, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
-            <Text style={styles.treeName}>{displayName(person)}</Text>
-            {person.gender ? <Text style={styles.treeMeta}>Gender: {person.gender}</Text> : null}
-            {person.dateOfBirth ? <Text style={styles.treeMeta}>Born: {formatDate(person.dateOfBirth)}</Text> : null}
-            {spouseNames.length > 0 ? <Text style={styles.treeMeta}>Spouse(s): {spouseNames.join(", ")}</Text> : null}
-          </View>
+          <TreePersonCard
+            person={person}
+            primaryColor={primaryColor}
+            showMemberPhotos={showMemberPhotos}
+            spouseNames={spouseNames}
+          />
         )}
+
+        {isDepthLimitReached && hasChildren ? (
+          <Text style={[styles.treeDepthLimitText, { color: primaryColor }]}>
+            Maximum depth reached ({MAX_GENERATION_DEPTH}). Expand further by switching root if needed.
+          </Text>
+        ) : null}
       </Pressable>
 
       {isExpanded ? (
@@ -1738,6 +2017,7 @@ const TreeNode = ({
                 collapsedNodeIds={collapsedNodeIds}
                 primaryColor={primaryColor}
                 secondaryColor={secondaryColor}
+                showMemberPhotos={showMemberPhotos}
                 onToggle={onToggle}
               />
             </View>
@@ -1758,6 +2038,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
+  shadowSoft: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  shadowStrong: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 5,
+  },
   headerTopRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1775,6 +2069,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  pageHeaderCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  pageHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  pageHeaderDescription: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
   },
   workspace: {
     flex: 1,
@@ -1800,6 +2110,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     alignItems: "center",
   },
+  sidebarCollapsedMobile: {
+    width: "100%",
+    minWidth: 0,
+    paddingTop: 36,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    alignItems: "center",
+  },
   sidebarHoverToggleButton: {
     position: "absolute",
     top: 6,
@@ -1819,6 +2137,13 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     gap: 8,
+  },
+  sidebarCollapsedTabsMobile: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 10,
+    paddingVertical: 4,
   },
   sidebarCollapsedTabButton: {
     width: 32,
@@ -1847,6 +2172,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   sidebarNavButtonText: {
     fontWeight: "700",
@@ -1901,6 +2229,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   toolbarActionButtonText: {
     color: "#ffffff",
@@ -1930,6 +2261,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2e5f4f",
     backgroundColor: "#d9e6de",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   tabButtonActive: {
     backgroundColor: "#2e5f4f",
@@ -1947,6 +2281,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
     backgroundColor: "#14332a",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   refreshButtonText: {
     color: "#ffffff",
@@ -1954,6 +2291,21 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: 80,
+  },
+  refreshIndicator: {
+    marginBottom: 10,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refreshIndicatorText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   panel: {
     backgroundColor: "#ffffff",
@@ -1967,6 +2319,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "#14332a",
+  },
+  panelHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  panelHeaderTextBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   panelHint: {
     marginTop: 4,
@@ -2111,6 +2472,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   primaryButtonText: {
     color: "#ffffff",
@@ -2126,6 +2492,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   secondaryDangerButtonText: {
     color: "#d43838",
@@ -2144,6 +2515,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+    backgroundColor: "#ffffff",
   },
   listText: {
     flex: 1,
@@ -2220,6 +2597,24 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: "#f8fcf9",
   },
+  treePersonHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  treePersonDetailColumn: {
+    flex: 1,
+  },
+  memberPhoto: {
+    borderWidth: 1,
+    backgroundColor: "#ffffff",
+  },
+  memberPhotoFallback: {
+    borderWidth: 1,
+    backgroundColor: "#f3f8f5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   treePairConnector: {
     alignSelf: "center",
     width: 14,
@@ -2246,6 +2641,11 @@ const styles = StyleSheet.create({
     color: "#3f6356",
     marginTop: 2,
     fontSize: 12,
+  },
+  treeDepthLimitText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
   },
   treeChildrenBlock: {
     marginTop: 8,
