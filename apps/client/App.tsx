@@ -558,7 +558,7 @@ const App = () => {
   const showInitialLoader = isLoading && !isRefreshing && !hasGraphContent;
   const showRefreshIndicator = isRefreshing || (isLoading && hasGraphContent);
   const isSidebarToggleVisible = !isWideLayout || !sidebarEnabled || showSidebarHoverToggle;
-  const showTopTabButtons = !(isSidebarMode && sidebarEnabled);
+  const showTopTabButtons = !isSidebarMode;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
