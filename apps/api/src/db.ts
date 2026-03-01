@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS ui_settings (
   active_tab TEXT NOT NULL,
   active_page TEXT NOT NULL,
   selected_theme_id TEXT NOT NULL,
+  theme_editor_mode TEXT NOT NULL DEFAULT 'PRESET',
   primary_color_input TEXT NOT NULL,
   secondary_color_input TEXT NOT NULL,
   show_customize_toolbar INTEGER NOT NULL,
@@ -97,12 +98,17 @@ if (!hasColumn("show_member_photos")) {
   db.exec("ALTER TABLE ui_settings ADD COLUMN show_member_photos INTEGER NOT NULL DEFAULT 1");
 }
 
+if (!hasColumn("theme_editor_mode")) {
+  db.exec("ALTER TABLE ui_settings ADD COLUMN theme_editor_mode TEXT NOT NULL DEFAULT 'PRESET'");
+}
+
 db.exec(
   `INSERT OR IGNORE INTO ui_settings (
      id,
      active_tab,
      active_page,
      selected_theme_id,
+     theme_editor_mode,
      primary_color_input,
      secondary_color_input,
      show_customize_toolbar,
@@ -115,6 +121,7 @@ db.exec(
      'TREE',
      'HOME',
      'FOREST',
+     'PRESET',
      '#2e5f4f',
      '#d9e6de',
      1,

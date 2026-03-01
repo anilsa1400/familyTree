@@ -52,6 +52,7 @@ export const uiSettingsInputSchema = z.object({
   activeTab: z.enum(["TREE", "MEMBERS", "RELATIONSHIPS", "FAMILIES"]),
   activePage: z.enum(["HOME", "SETTINGS"]),
   selectedThemeId: z.enum(["FOREST", "OCEAN", "SUNSET", "GRAPHITE"]),
+  themeEditorMode: z.enum(["PRESET", "CUSTOMIZE"]),
   primaryColorInput: hexColor,
   secondaryColorInput: hexColor,
   layoutMode: z.enum(["SIDEBAR", "TOOLBAR"]),

@@ -1,10 +1,11 @@
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -33,6 +34,7 @@ type AppPage = "HOME" | "SETTINGS";
 type LayoutMode = "SIDEBAR" | "TOOLBAR";
 type SectionViewMode = "TILE" | "LIST";
 type ThemePresetId = "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
+type ThemeEditorMode = "PRESET" | "CUSTOMIZE";
 
 const MAX_GENERATION_DEPTH = 10;
 
@@ -92,6 +94,22 @@ const themePresets: ThemePreset[] = [
   },
 ];
 
+const basicColorPickerPalette = [
+  "#2e5f4f",
+  "#1e5d8c",
+  "#a24d2f",
+  "#3a4552",
+  "#2a9d8f",
+  "#fb8500",
+  "#5e548e",
+  "#ef476f",
+  "#ffd166",
+  "#06d6a0",
+  "#118ab2",
+  "#ffffff",
+  "#000000",
+];
+
 const isHexColor = (value: string) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(value.trim());
 
 const uiPreferencesStorageKey = "family-tree-ui-preferences-v2";
@@ -100,6 +118,7 @@ type UiPreferences = {
   activeTab: TabKey;
   activePage: AppPage;
   selectedThemeId: ThemePresetId;
+  themeEditorMode: ThemeEditorMode;
   primaryColorInput: string;
   secondaryColorInput: string;
   layoutMode: LayoutMode;
@@ -117,6 +136,9 @@ const isAppPage = (value: unknown): value is AppPage =>
 
 const isThemePresetId = (value: unknown): value is ThemePresetId =>
   value === "FOREST" || value === "OCEAN" || value === "SUNSET" || value === "GRAPHITE";
+
+const isThemeEditorMode = (value: unknown): value is ThemeEditorMode =>
+  value === "PRESET" || value === "CUSTOMIZE";
 
 const isLayoutMode = (value: unknown): value is LayoutMode =>
   value === "SIDEBAR" || value === "TOOLBAR";
@@ -364,6 +386,7 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<TabKey>("TREE");
   const [activePage, setActivePage] = useState<AppPage>("HOME");
   const [selectedThemeId, setSelectedThemeId] = useState<ThemePresetId>("FOREST");
+  const [themeEditorMode, setThemeEditorMode] = useState<ThemeEditorMode>("PRESET");
   const initialTheme = themePresets.find((preset) => preset.id === "FOREST") ?? themePresets[0];
   const [primaryColorInput, setPrimaryColorInput] = useState(initialTheme.primaryColor);
   const [secondaryColorInput, setSecondaryColorInput] = useState(initialTheme.secondaryColor);
@@ -440,6 +463,7 @@ const App = () => {
     setActiveTab(settings.activeTab);
     setActivePage(settings.activePage);
     setSelectedThemeId(settings.selectedThemeId);
+    setThemeEditorMode(settings.themeEditorMode);
     setPrimaryColorInput(settings.primaryColorInput);
     setSecondaryColorInput(settings.secondaryColorInput);
     setLayoutMode(settings.layoutMode);
@@ -477,6 +501,10 @@ const App = () => {
 
           if (isThemePresetId(parsed.selectedThemeId)) {
             setSelectedThemeId(parsed.selectedThemeId);
+          }
+
+          if (isThemeEditorMode(parsed.themeEditorMode)) {
+            setThemeEditorMode(parsed.themeEditorMode);
           }
 
           if (typeof parsed.primaryColorInput === "string") {
@@ -541,6 +569,7 @@ const App = () => {
           activeTab: settings.activeTab,
           activePage: settings.activePage,
           selectedThemeId: settings.selectedThemeId,
+          themeEditorMode: settings.themeEditorMode,
           primaryColorInput: settings.primaryColorInput,
           secondaryColorInput: settings.secondaryColorInput,
           layoutMode: settings.layoutMode,
@@ -583,6 +612,7 @@ const App = () => {
         activeTab,
         activePage,
         selectedThemeId,
+        themeEditorMode,
         primaryColorInput,
         secondaryColorInput,
         layoutMode,
@@ -600,6 +630,7 @@ const App = () => {
     activeTab,
     activePage,
     selectedThemeId,
+    themeEditorMode,
     primaryColorInput,
     secondaryColorInput,
     layoutMode,
@@ -619,6 +650,7 @@ const App = () => {
       activeTab,
       activePage,
       selectedThemeId,
+      themeEditorMode,
       primaryColorInput,
       secondaryColorInput,
       layoutMode,
@@ -652,6 +684,7 @@ const App = () => {
     activeTab,
     activePage,
     selectedThemeId,
+    themeEditorMode,
     primaryColorInput,
     secondaryColorInput,
     layoutMode,
@@ -723,6 +756,7 @@ const App = () => {
       return;
     }
 
+    setThemeEditorMode("PRESET");
     setSelectedThemeId(preset.id);
     setPrimaryColorInput(preset.primaryColor);
     setSecondaryColorInput(preset.secondaryColor);
@@ -850,6 +884,7 @@ const App = () => {
         {activePage === "SETTINGS" ? (
           <SettingsPage
             selectedThemeId={selectedThemeId}
+            themeEditorMode={themeEditorMode}
             primaryColorInput={primaryColorInput}
             secondaryColorInput={secondaryColorInput}
             layoutMode={layoutMode}
@@ -858,6 +893,7 @@ const App = () => {
             resolvedPrimaryColor={resolvedPrimaryColor}
             resolvedSecondaryColor={resolvedSecondaryColor}
             onPresetSelect={applyThemePreset}
+            onThemeEditorModeChange={setThemeEditorMode}
             onPrimaryColorChange={setPrimaryColorInput}
             onSecondaryColorChange={setSecondaryColorInput}
             onLayoutModeSelect={(mode) => {
@@ -1131,6 +1167,7 @@ const App = () => {
 
 type SettingsPageProps = {
   selectedThemeId: ThemePresetId;
+  themeEditorMode: ThemeEditorMode;
   primaryColorInput: string;
   secondaryColorInput: string;
   layoutMode: LayoutMode;
@@ -1139,6 +1176,7 @@ type SettingsPageProps = {
   resolvedPrimaryColor: string;
   resolvedSecondaryColor: string;
   onPresetSelect: (presetId: ThemePresetId) => void;
+  onThemeEditorModeChange: (mode: ThemeEditorMode) => void;
   onPrimaryColorChange: (value: string) => void;
   onSecondaryColorChange: (value: string) => void;
   onLayoutModeSelect: (mode: LayoutMode) => void;
@@ -1146,8 +1184,86 @@ type SettingsPageProps = {
   onToggleShowMemberPhotos: () => void;
 };
 
+type ColorPickerFieldProps = {
+  label: string;
+  selectedColor: string;
+  onSelectColor: (value: string) => void;
+};
+
+const toHexSix = (value: string) => {
+  const trimmed = value.trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^#[0-9A-Fa-f]{3}$/.test(trimmed)) {
+    const [red, green, blue] = trimmed.slice(1).split("");
+    return `#${red}${red}${green}${green}${blue}${blue}`;
+  }
+
+  return "#2e5f4f";
+};
+
+const ColorPickerField = ({ label, selectedColor, onSelectColor }: ColorPickerFieldProps) => {
+  const webColorInputValue = toHexSix(selectedColor);
+  const isWeb = Platform.OS === "web";
+
+  return (
+    <View style={styles.colorPickerBlock}>
+      <View style={styles.colorPickerHeaderRow}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.colorPickerValueChip}>
+          <View style={[styles.colorPickerValueDot, { backgroundColor: selectedColor }]} />
+          <Text style={styles.colorPickerValueText}>{selectedColor.toUpperCase()}</Text>
+        </View>
+      </View>
+
+      <View style={styles.colorPickerControlRow}>
+        {isWeb ? (
+          <View style={styles.webColorPickerFrame}>
+            {createElement("input", {
+              type: "color",
+              value: webColorInputValue,
+              onChange: (event: { target?: { value?: string } }) => {
+                const value = event.target?.value;
+                if (value) {
+                  onSelectColor(value);
+                }
+              },
+              style: {
+                width: 42,
+                height: 32,
+                border: "none",
+                background: "transparent",
+                padding: 0,
+                cursor: "pointer",
+              },
+            })}
+          </View>
+        ) : (
+          <View style={styles.basicPaletteRow}>
+            {basicColorPickerPalette.map((colorValue) => {
+              const isSelected = selectedColor.trim().toLowerCase() === colorValue.toLowerCase();
+              return (
+                <Pressable
+                  key={`${label}-fallback-${colorValue}`}
+                  style={[styles.basicPaletteSwatchButton, isSelected && styles.basicPaletteSwatchButtonActive]}
+                  onPress={() => onSelectColor(colorValue)}
+                >
+                  <View style={[styles.basicPaletteSwatch, { backgroundColor: colorValue }]} />
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+};
+
 const SettingsPage = ({
   selectedThemeId,
+  themeEditorMode,
   primaryColorInput,
   secondaryColorInput,
   layoutMode,
@@ -1156,115 +1272,168 @@ const SettingsPage = ({
   resolvedPrimaryColor,
   resolvedSecondaryColor,
   onPresetSelect,
+  onThemeEditorModeChange,
   onPrimaryColorChange,
   onSecondaryColorChange,
   onLayoutModeSelect,
   onToggleSidebar,
   onToggleShowMemberPhotos,
-}: SettingsPageProps) => (
-  <ScrollView contentContainerStyle={styles.content}>
-    <View style={[styles.panel, styles.shadowSoft]}>
-      <Text style={styles.panelTitle}>Settings</Text>
-      <Text style={styles.panelHint}>
-        Select a theme, customize primary and secondary colors, and configure interface options.
-      </Text>
+}: SettingsPageProps) => {
+  const isCustomizeMode = themeEditorMode === "CUSTOMIZE";
 
-      <Text style={styles.label}>Theme Preset</Text>
-      <View style={styles.optionRowWrap}>
-        {themePresets.map((preset) => {
-          const isSelected = selectedThemeId === preset.id;
-          return (
-            <Pressable
-              key={`settings-preset-${preset.id}`}
-              style={[
-                styles.optionButton,
-                isSelected && { backgroundColor: resolvedPrimaryColor, borderColor: resolvedPrimaryColor },
-              ]}
-              onPress={() => onPresetSelect(preset.id)}
-            >
-              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextActive]}>
-                {preset.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+  const applyPrimaryColor = (value: string) => {
+    onThemeEditorModeChange("CUSTOMIZE");
+    onPrimaryColorChange(value);
+  };
+
+  const applySecondaryColor = (value: string) => {
+    onThemeEditorModeChange("CUSTOMIZE");
+    onSecondaryColorChange(value);
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <View style={[styles.panel, styles.shadowSoft]}>
+        <Text style={styles.panelTitle}>Settings</Text>
+        <Text style={styles.panelHint}>
+          Select a theme using preset mode or switch to customize mode for manual colors.
+        </Text>
+
+        <Text style={styles.label}>Theme Mode</Text>
+        <View style={styles.optionRowWrap}>
+          {(["PRESET", "CUSTOMIZE"] as ThemeEditorMode[]).map((mode) => {
+            const isSelected = themeEditorMode === mode;
+            const label = mode === "PRESET" ? "Preset" : "Customize";
+
+            return (
+              <Pressable
+                key={`theme-editor-mode-${mode}`}
+                style={[
+                  styles.optionButton,
+                  { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
+                  isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
+                ]}
+                onPress={() => onThemeEditorModeChange(mode)}
+              >
+                <Text style={[styles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && styles.optionButtonTextActive]}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {!isCustomizeMode ? (
+          <>
+            <Text style={styles.label}>Theme Preset</Text>
+            <View style={styles.optionRowWrap}>
+              {themePresets.map((preset) => {
+                const isSelected = selectedThemeId === preset.id;
+                return (
+                  <Pressable
+                    key={`settings-preset-${preset.id}`}
+                    style={[
+                      styles.optionButton,
+                      isSelected && { backgroundColor: resolvedPrimaryColor, borderColor: resolvedPrimaryColor },
+                    ]}
+                    onPress={() => onPresetSelect(preset.id)}
+                  >
+                    <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextActive]}>
+                      {preset.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : (
+          <>
+            <ColorPickerField
+              label="Primary Color Picker"
+              selectedColor={resolvedPrimaryColor}
+              onSelectColor={applyPrimaryColor}
+            />
+            <TextInput
+              value={primaryColorInput}
+              onChangeText={applyPrimaryColor}
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="#2e5f4f"
+            />
+            {!isHexColor(primaryColorInput) ? (
+              <Text style={styles.invalidHint}>Invalid color format. Use values like #123abc.</Text>
+            ) : null}
+
+            <ColorPickerField
+              label="Secondary Color Picker"
+              selectedColor={resolvedSecondaryColor}
+              onSelectColor={applySecondaryColor}
+            />
+            <TextInput
+              value={secondaryColorInput}
+              onChangeText={applySecondaryColor}
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="#d9e6de"
+            />
+            {!isHexColor(secondaryColorInput) ? (
+              <Text style={styles.invalidHint}>Invalid color format. Use values like #def0ab.</Text>
+            ) : null}
+          </>
+        )}
+
+        <View style={styles.settingsSwatchRow}>
+          <View style={[styles.settingsSwatch, { backgroundColor: resolvedPrimaryColor }]} />
+          <Text style={styles.settingsSwatchText}>Applied primary: {resolvedPrimaryColor}</Text>
+        </View>
+        <View style={styles.settingsSwatchRow}>
+          <View style={[styles.settingsSwatch, { backgroundColor: resolvedSecondaryColor }]} />
+          <Text style={styles.settingsSwatchText}>Applied secondary: {resolvedSecondaryColor}</Text>
+        </View>
+
+        <Text style={styles.subsectionTitle}>Navigation</Text>
+        <View style={styles.optionRowWrap}>
+          {(["SIDEBAR", "TOOLBAR"] as LayoutMode[]).map((mode) => {
+            const isSelected = layoutMode === mode;
+            const label = mode === "SIDEBAR" ? "Sidebar" : "Toolbar";
+
+            return (
+              <Pressable
+                key={`layout-mode-${mode}`}
+                style={[
+                  styles.optionButton,
+                  { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
+                  isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
+                ]}
+                onPress={() => onLayoutModeSelect(mode)}
+              >
+                <Text style={[styles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && styles.optionButtonTextActive]}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.subsectionTitle}>Display Options</Text>
+        <SettingsToggle
+          label="Show Member Photos"
+          value={showMemberPhotos}
+          accentColor={resolvedPrimaryColor}
+          onPress={onToggleShowMemberPhotos}
+        />
+        <SettingsToggle
+          label="Expand Sidebar (Sidebar mode)"
+          value={sidebarEnabled}
+          accentColor={resolvedPrimaryColor}
+          onPress={onToggleSidebar}
+        />
       </View>
-
-      <Text style={styles.label}>Primary Color (#RGB or #RRGGBB)</Text>
-      <TextInput
-        value={primaryColorInput}
-        onChangeText={onPrimaryColorChange}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="#2e5f4f"
-      />
-      {!isHexColor(primaryColorInput) ? (
-        <Text style={styles.invalidHint}>Invalid color format. Use values like #123abc.</Text>
-      ) : null}
-
-      <Text style={styles.label}>Secondary Color (#RGB or #RRGGBB)</Text>
-      <TextInput
-        value={secondaryColorInput}
-        onChangeText={onSecondaryColorChange}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="#d9e6de"
-      />
-      {!isHexColor(secondaryColorInput) ? (
-        <Text style={styles.invalidHint}>Invalid color format. Use values like #def0ab.</Text>
-      ) : null}
-
-      <View style={styles.settingsSwatchRow}>
-        <View style={[styles.settingsSwatch, { backgroundColor: resolvedPrimaryColor }]} />
-        <Text style={styles.settingsSwatchText}>Applied primary: {resolvedPrimaryColor}</Text>
-      </View>
-      <View style={styles.settingsSwatchRow}>
-        <View style={[styles.settingsSwatch, { backgroundColor: resolvedSecondaryColor }]} />
-        <Text style={styles.settingsSwatchText}>Applied secondary: {resolvedSecondaryColor}</Text>
-      </View>
-
-      <Text style={styles.subsectionTitle}>Navigation</Text>
-      <View style={styles.optionRowWrap}>
-        {(["SIDEBAR", "TOOLBAR"] as LayoutMode[]).map((mode) => {
-          const isSelected = layoutMode === mode;
-          const label = mode === "SIDEBAR" ? "Sidebar" : "Toolbar";
-
-          return (
-            <Pressable
-              key={`layout-mode-${mode}`}
-              style={[
-                styles.optionButton,
-                { borderColor: resolvedPrimaryColor, backgroundColor: resolvedSecondaryColor },
-                isSelected && { borderColor: resolvedPrimaryColor, backgroundColor: resolvedPrimaryColor },
-              ]}
-              onPress={() => onLayoutModeSelect(mode)}
-            >
-              <Text style={[styles.optionButtonText, { color: resolvedPrimaryColor }, isSelected && styles.optionButtonTextActive]}>
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <Text style={styles.subsectionTitle}>Display Options</Text>
-      <SettingsToggle
-        label="Show Member Photos"
-        value={showMemberPhotos}
-        accentColor={resolvedPrimaryColor}
-        onPress={onToggleShowMemberPhotos}
-      />
-      <SettingsToggle
-        label="Expand Sidebar (Sidebar mode)"
-        value={sidebarEnabled}
-        accentColor={resolvedPrimaryColor}
-        onPress={onToggleSidebar}
-      />
-    </View>
-  </ScrollView>
-);
+    </ScrollView>
+  );
+};
 
 type SettingsToggleProps = {
   label: string;
@@ -3769,6 +3938,79 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     fontWeight: "600",
     color: "#1f4b3d",
+  },
+  colorPickerBlock: {
+    marginBottom: 8,
+  },
+  colorPickerHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  colorPickerValueChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#bfd1c9",
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: "#ffffff",
+  },
+  colorPickerValueDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#9db2a8",
+  },
+  colorPickerValueText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#1f4b3d",
+    letterSpacing: 0.4,
+  },
+  colorPickerControlRow: {
+    marginBottom: 8,
+  },
+  webColorPickerFrame: {
+    borderWidth: 1,
+    borderColor: "#c2d5cc",
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    alignSelf: "flex-start",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  basicPaletteRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  basicPaletteSwatchButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#b8ccc2",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  basicPaletteSwatchButtonActive: {
+    borderWidth: 2,
+    borderColor: "#1f4b3d",
+  },
+  basicPaletteSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "#d2e2da",
   },
   input: {
     borderWidth: 1,

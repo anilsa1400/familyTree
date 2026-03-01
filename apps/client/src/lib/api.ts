@@ -112,6 +112,7 @@ export type UiSettingsPayload = {
   activeTab: "TREE" | "MEMBERS" | "RELATIONSHIPS" | "FAMILIES";
   activePage: "HOME" | "SETTINGS";
   selectedThemeId: "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
+  themeEditorMode: "PRESET" | "CUSTOMIZE";
   primaryColorInput: string;
   secondaryColorInput: string;
   layoutMode: "SIDEBAR" | "TOOLBAR";

@@ -48,6 +48,7 @@ export type UiSettingsRecord = {
   active_tab: "TREE" | "MEMBERS" | "RELATIONSHIPS" | "FAMILIES";
   active_page: "HOME" | "SETTINGS";
   selected_theme_id: "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
+  theme_editor_mode: "PRESET" | "CUSTOMIZE";
   primary_color_input: string;
   secondary_color_input: string;
   show_customize_toolbar: 0 | 1;
