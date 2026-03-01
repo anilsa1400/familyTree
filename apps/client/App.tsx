@@ -2797,7 +2797,8 @@ const TreePersonCard = ({
   const spouseSummary = spouseNames.slice(0, 2).join(", ");
   const hasSpouseSummary = spouseSummary.trim().length > 0;
   const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
-  const lifeLabel = memberLifeLabel(person);
+  const birthLabel = person.dateOfBirth ? formatDate(person.dateOfBirth) : "Not set";
+  const deathLabel = person.dateOfDeath ? formatDate(person.dateOfDeath) : "Alive";
   const isDeceased = Boolean(person.dateOfDeath);
   const notesPreview = person.notes?.trim() || "No notes provided.";
 
@@ -2838,7 +2839,12 @@ const TreePersonCard = ({
 
       <View style={styles.treeInfoPill}>
         <Text style={styles.treeInfoPillText} numberOfLines={1}>
-          {lifeLabel}
+          DOB: {birthLabel}
+        </Text>
+      </View>
+      <View style={styles.treeInfoPill}>
+        <Text style={styles.treeInfoPillText} numberOfLines={1}>
+          DOD: {deathLabel}
         </Text>
       </View>
       {hasSpouseSummary ? (
@@ -3165,7 +3171,7 @@ const TreePanel = ({
         style={[
           styles.familyTreeGroupCard,
           viewMode === "LIST" && styles.familyTreeGroupCardList,
-          { width: familySectionWidth },
+          { minWidth: familySectionWidth },
           { borderColor: primaryColor, backgroundColor: `${secondaryColor}66` },
           styles.shadowSoft,
         ]}
@@ -3297,7 +3303,13 @@ const TreePanel = ({
           <View style={styles.horizontalSectionsRow}>{familySections}</View>
         </ScrollView>
       ) : (
-        <View style={styles.verticalSectionsColumn}>{familySections}</View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.treeHorizontalScrollContent}
+        >
+          <View style={styles.verticalSectionsColumn}>{familySections}</View>
+        </ScrollView>
       )}
     </View>
   );
@@ -3403,6 +3415,17 @@ const TreeNode = ({
   });
 
   const membersForNode = partner ? [person, partner] : [person];
+  const shouldStackNodeMembers = viewMode === "TILE" && membersForNode.length > 1;
+  const pairPenalty = shouldStackNodeMembers ? 0 : membersForNode.length > 1 ? 8 : 0;
+  const depthPenalty = depth * 6;
+  const maxDepthWidth = cardWidth;
+  const minDepthWidth = shouldStackNodeMembers ? 188 : 176;
+  const depthAdjustedCardWidth = clamp(cardWidth - depthPenalty - pairPenalty, minDepthWidth, maxDepthWidth);
+  const depthAdjustedCardHeight = Math.max(Math.round(cardHeight * (depthAdjustedCardWidth / cardWidth)), 210);
+  const treeCardContentWidth = shouldStackNodeMembers
+    ? depthAdjustedCardWidth
+    : depthAdjustedCardWidth * membersForNode.length + (membersForNode.length - 1) * 12;
+  const treeCardMinWidth = Math.max(treeCardContentWidth + 16, 220);
   const resolveSpouseNamesForPerson = (nodePersonId: string) => {
     const spouseNames = new Set<string>();
     (spouseByPerson.get(nodePersonId) ?? []).forEach((relation) => {
@@ -3437,7 +3460,6 @@ const TreeNode = ({
         styles.treeNode,
         viewMode === "LIST" && styles.treeNodeList,
         depth === 0 && styles.treeRootNode,
-        { marginLeft: depth * 14 },
       ]}
     >
       <Pressable
@@ -3445,6 +3467,7 @@ const TreeNode = ({
           styles.treeCard,
           viewMode === "LIST" && styles.treeCardList,
           hasChildren && styles.treeCardBranch,
+          { minWidth: treeCardMinWidth },
           { borderColor: primaryColor, backgroundColor: secondaryColor },
           styles.shadowSoft,
         ]}
@@ -3459,7 +3482,7 @@ const TreeNode = ({
           ) : null}
         </View>
 
-        <View style={styles.treeMemberCardsRow}>
+        <View style={[styles.treeMemberCardsRow, shouldStackNodeMembers && styles.treeMemberCardsRowStacked]}>
           {membersForNode.map((nodeMember) => (
             <TreePersonCard
               key={`${personId}-${partnerId ?? "single"}-${nodeMember.id}`}
@@ -3468,8 +3491,8 @@ const TreeNode = ({
               showMemberPhotos={showMemberPhotos}
               familyName={familyNameByPersonId.get(nodeMember.id) ?? familyNameFromLastName(nodeMember.lastName)}
               viewMode={viewMode}
-              cardWidth={cardWidth}
-              cardHeight={cardHeight}
+              cardWidth={depthAdjustedCardWidth}
+              cardHeight={depthAdjustedCardHeight}
               spouseNames={resolveSpouseNamesForPerson(nodeMember.id)}
             />
           ))}
@@ -4412,6 +4435,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#e6eeef",
     borderColor: "#d5e1e2",
   },
+  treeHorizontalScrollContent: {
+    paddingRight: 8,
+  },
   sectionModeButton: {
     borderWidth: 1,
     borderRadius: 999,
@@ -4457,7 +4483,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 12,
     marginBottom: 12,
-    alignSelf: "center",
+    alignSelf: "flex-start",
   },
   familyTreeGroupCardList: {
     paddingVertical: 12,
@@ -4524,6 +4550,7 @@ const styles = StyleSheet.create({
   },
   treeNode: {
     marginBottom: 14,
+    alignSelf: "flex-start",
   },
   treeRootNode: {
     alignSelf: "center",
@@ -4538,7 +4565,7 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: "transparent",
     alignItems: "center",
-    width: "100%",
+    alignSelf: "flex-start",
   },
   treeCardList: {
     borderRadius: 10,
@@ -4566,13 +4593,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     gap: 12,
-    flexWrap: "wrap",
-    width: "100%",
+    flexWrap: "nowrap",
+    alignSelf: "flex-start",
+  },
+  treeMemberCardsRowStacked: {
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "flex-start",
   },
   treePersonTile: {
-    flex: 0,
     borderWidth: 1,
     borderColor: "#d8e3df",
     borderRadius: 12,
@@ -4583,6 +4614,7 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     justifyContent: "flex-start",
     gap: 7,
+    flexShrink: 0,
   },
   treePersonTilePortrait: {
     flex: 0,
@@ -4707,8 +4739,8 @@ const styles = StyleSheet.create({
   },
   treeChildrenBlock: {
     marginTop: 10,
-    marginLeft: 14,
-    paddingLeft: 14,
+    marginLeft: 0,
+    paddingLeft: 10,
     borderLeftWidth: 2,
     borderLeftColor: "#596862",
   },
@@ -4717,9 +4749,9 @@ const styles = StyleSheet.create({
   },
   treeChildConnector: {
     position: "absolute",
-    left: -14,
+    left: -10,
     top: 24,
-    width: 14,
+    width: 10,
     borderTopWidth: 2,
     borderTopColor: "#596862",
   },
