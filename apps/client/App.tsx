@@ -1097,6 +1097,7 @@ const App = () => {
                       isMutating={isMutating}
                       primaryColor={uiTheme.primaryColor}
                       secondaryColor={uiTheme.secondaryColor}
+                      showMemberPhotos={showMemberPhotos}
                       familyNameByPersonId={familyNameByPersonId}
                       familyNames={familyNames}
                       selectedFamilyName={selectedFamilyName}
@@ -1808,11 +1809,114 @@ const FamiliesPanel = ({
   );
 };
 
+type MemberDetailsCardProps = {
+  person: Person;
+  familyName: string;
+  primaryColor: string;
+  secondaryColor: string;
+  showMemberPhotos: boolean;
+  isSelected: boolean;
+  cardWidth: number | "100%";
+  onPress: () => void;
+};
+
+const memberInitials = (person: Person) => {
+  const first = person.firstName.trim().charAt(0).toUpperCase();
+  const last = person.lastName.trim().charAt(0).toUpperCase();
+  const initials = `${first}${last}`.trim();
+  return initials || "M";
+};
+
+const memberLifeLabel = (person: Person) => {
+  const birthDate = formatDate(person.dateOfBirth);
+  const deathDate = formatDate(person.dateOfDeath);
+
+  if (birthDate && deathDate) {
+    return `${birthDate} - ${deathDate}`;
+  }
+
+  if (birthDate) {
+    return `Born ${birthDate}`;
+  }
+
+  if (deathDate) {
+    return `Died ${deathDate}`;
+  }
+
+  return "Dates not set";
+};
+
+const MemberDetailsCard = ({
+  person,
+  familyName,
+  primaryColor,
+  secondaryColor,
+  showMemberPhotos,
+  isSelected,
+  cardWidth,
+  onPress,
+}: MemberDetailsCardProps) => {
+  const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
+  const notesPreview = person.notes?.trim() || "No notes provided.";
+  const imageUrl = person.photoUrl?.trim();
+  const hasPhoto = showMemberPhotos && Boolean(imageUrl);
+
+  return (
+    <Pressable
+      style={[
+        styles.memberDetailCard,
+        { width: cardWidth, borderColor: primaryColor },
+        isSelected
+          ? { borderColor: primaryColor, backgroundColor: `${primaryColor}1a` }
+          : { backgroundColor: "#ffffff" },
+        styles.shadowSoft,
+      ]}
+      onPress={onPress}
+    >
+      <View style={styles.memberDetailHeaderRow}>
+        {hasPhoto ? (
+          <Image source={{ uri: imageUrl }} style={[styles.memberDetailAvatar, { borderColor: primaryColor }]} />
+        ) : (
+          <View style={[styles.memberDetailAvatarFallback, { borderColor: primaryColor }]}>
+            <Text style={[styles.memberDetailAvatarInitials, { color: primaryColor }]}>{memberInitials(person)}</Text>
+          </View>
+        )}
+
+        <View style={styles.memberDetailHeaderText}>
+          <Text style={styles.memberDetailName} numberOfLines={2}>
+            {displayName(person)}
+          </Text>
+          <Text style={styles.memberDetailFamily} numberOfLines={1}>
+            {familyName} Family
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.memberDetailTagRow}>
+        <View style={[styles.memberDetailTag, { borderColor: primaryColor, backgroundColor: `${secondaryColor}` }]}>
+          <Text style={[styles.memberDetailTagText, { color: primaryColor }]}>{genderLabel}</Text>
+        </View>
+        {person.dateOfDeath ? (
+          <View style={styles.memberDetailStatusTag}>
+            <Text style={styles.memberDetailStatusTagText}>RIP</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={styles.memberDetailMetaLine}>{memberLifeLabel(person)}</Text>
+      <Text style={styles.memberDetailNotes} numberOfLines={3}>
+        {notesPreview}
+      </Text>
+    </Pressable>
+  );
+};
+
 type MembersPanelProps = {
   persons: Person[];
   isMutating: boolean;
   primaryColor: string;
   secondaryColor: string;
+  showMemberPhotos: boolean;
   familyNameByPersonId: Map<string, string>;
   familyNames: string[];
   selectedFamilyName: string | null;
@@ -1831,6 +1935,7 @@ const MembersPanel = ({
   isMutating,
   primaryColor,
   secondaryColor,
+  showMemberPhotos,
   familyNameByPersonId,
   familyNames,
   selectedFamilyName,
@@ -1847,6 +1952,15 @@ const MembersPanel = ({
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [formState, setFormState] = useState<PersonFormState>(defaultFormState);
   const listFamilyCardWidth = useMemo(() => clamp(screenWidth - 96, 240, 380), [screenWidth]);
+  const tileMemberCardWidth = useMemo(() => {
+    if (screenWidth < 640) {
+      return clamp(screenWidth - 92, 220, 380);
+    }
+    if (screenWidth < 980) {
+      return clamp(Math.floor((screenWidth - 142) / 2), 220, 320);
+    }
+    return clamp(Math.floor((screenWidth - 196) / 3), 220, 300);
+  }, [screenWidth]);
 
   const sortedPersons = useMemo(
     () => [...persons].sort((a, b) => displayName(a).localeCompare(displayName(b))),
@@ -1989,23 +2103,23 @@ const MembersPanel = ({
                   <Text style={styles.familyGroupCount}>{familyGroup.members.length} member(s)</Text>
                 </View>
 
-                <View style={styles.memberListColumn}>
-                  {familyGroup.members.map((person) => (
-                    <Pressable
-                      key={person.id}
-                      style={[
-                        styles.memberListRow,
-                        { borderColor: primaryColor },
-                        selectedPersonId === person.id && { backgroundColor: `${primaryColor}22`, borderColor: primaryColor },
-                      ]}
-                      onPress={() => selectPerson(person)}
-                    >
-                      <Text style={[styles.memberListName, { color: primaryColor }]}>{displayName(person)}</Text>
-                      <Text style={styles.memberListMeta}>
-                        {person.gender ?? "Unspecified"} | {familyNameByPersonId.get(person.id) ?? "Unknown"} Family
-                      </Text>
-                    </Pressable>
-                  ))}
+                <View style={styles.memberCardColumn}>
+                  {familyGroup.members.map((person) => {
+                    const familyName = familyNameByPersonId.get(person.id) ?? familyGroup.familyName;
+                    return (
+                      <MemberDetailsCard
+                        key={person.id}
+                        person={person}
+                        familyName={familyName}
+                        primaryColor={primaryColor}
+                        secondaryColor={secondaryColor}
+                        showMemberPhotos={showMemberPhotos}
+                        isSelected={selectedPersonId === person.id}
+                        cardWidth={"100%"}
+                        onPress={() => selectPerson(person)}
+                      />
+                    );
+                  })}
                 </View>
               </View>
             ))}
@@ -2023,29 +2137,24 @@ const MembersPanel = ({
                 <Text style={styles.familyGroupCount}>{familyGroup.members.length} member(s)</Text>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
-                {familyGroup.members.map((person) => (
-                  <Pressable
-                    key={person.id}
-                    style={[
-                      styles.selectorPill,
-                      { borderColor: primaryColor, backgroundColor: "#ffffff" },
-                      selectedPersonId === person.id && { backgroundColor: primaryColor, borderColor: primaryColor },
-                    ]}
-                    onPress={() => selectPerson(person)}
-                  >
-                    <Text
-                      style={[
-                        styles.selectorPillText,
-                        { color: primaryColor },
-                        selectedPersonId === person.id && styles.selectorPillTextActive,
-                      ]}
-                    >
-                      {displayName(person)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              <View style={styles.memberCardGrid}>
+                {familyGroup.members.map((person) => {
+                  const familyName = familyNameByPersonId.get(person.id) ?? familyGroup.familyName;
+                  return (
+                    <MemberDetailsCard
+                      key={person.id}
+                      person={person}
+                      familyName={familyName}
+                      primaryColor={primaryColor}
+                      secondaryColor={secondaryColor}
+                      showMemberPhotos={showMemberPhotos}
+                      isSelected={selectedPersonId === person.id}
+                      cardWidth={tileMemberCardWidth}
+                      onPress={() => selectPerson(person)}
+                    />
+                  );
+                })}
+              </View>
             </View>
           ))}
         </View>
@@ -2684,14 +2793,13 @@ const TreePersonCard = ({
   cardHeight,
   spouseNames = [],
 }: TreePersonCardProps) => {
-  const avatarSize = viewMode === "TILE" ? 68 : 56;
+  const avatarSize = viewMode === "TILE" ? 54 : 48;
   const spouseSummary = spouseNames.slice(0, 2).join(", ");
   const hasSpouseSummary = spouseSummary.trim().length > 0;
   const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
-  const lifeLabel = person.dateOfBirth
-    ? `Born ${formatDate(person.dateOfBirth)}`
-    : "Birth date not set";
+  const lifeLabel = memberLifeLabel(person);
   const isDeceased = Boolean(person.dateOfDeath);
+  const notesPreview = person.notes?.trim() || "No notes provided.";
 
   return (
     <View
@@ -2703,39 +2811,46 @@ const TreePersonCard = ({
         styles.shadowSoft,
       ]}
     >
-      <View style={[styles.treePersonAvatarWrap, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
-        <MemberPhoto person={person} primaryColor={primaryColor} size={avatarSize} showPhoto={showMemberPhotos} />
-      </View>
-      <View style={styles.treePersonDetailColumn}>
-        <Text style={styles.treeName} numberOfLines={2}>
-          {displayName(person)}
-        </Text>
-        <Text style={styles.treeMeta} numberOfLines={1}>
-          {familyName} Family
-        </Text>
-        <View style={styles.treeInfoPill}>
-          <Text style={styles.treeInfoPillText} numberOfLines={1}>
-            {genderLabel}
+      <View style={styles.treePersonHeaderRow}>
+        <View style={[styles.treePersonAvatarWrap, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
+          <MemberPhoto person={person} primaryColor={primaryColor} size={avatarSize} showPhoto={showMemberPhotos} />
+        </View>
+        <View style={styles.treePersonDetailColumn}>
+          <Text style={styles.treeName} numberOfLines={2}>
+            {displayName(person)}
+          </Text>
+          <Text style={styles.treeMeta} numberOfLines={1}>
+            {familyName} Family
           </Text>
         </View>
-        <View style={styles.treeInfoPill}>
-          <Text style={styles.treeInfoPillText} numberOfLines={1}>
-            {lifeLabel}
-          </Text>
+      </View>
+
+      <View style={styles.treeMetaBadgeRow}>
+        <View style={[styles.treeMetaBadge, { borderColor: primaryColor }]}>
+          <Text style={[styles.treeMetaBadgeText, { color: primaryColor }]}>{genderLabel}</Text>
         </View>
         {isDeceased ? (
           <View style={styles.treeStatusBadge}>
             <Text style={styles.treeStatusBadgeText}>RIP</Text>
           </View>
         ) : null}
-        {hasSpouseSummary ? (
-          <View style={styles.treeInfoPill}>
-            <Text style={styles.treeInfoPillText} numberOfLines={2}>
-              Partner: {spouseSummary}
-            </Text>
-          </View>
-        ) : null}
       </View>
+
+      <View style={styles.treeInfoPill}>
+        <Text style={styles.treeInfoPillText} numberOfLines={1}>
+          {lifeLabel}
+        </Text>
+      </View>
+      {hasSpouseSummary ? (
+        <View style={styles.treeInfoPill}>
+          <Text style={styles.treeInfoPillText} numberOfLines={2}>
+            Partner: {spouseSummary}
+          </Text>
+        </View>
+      ) : null}
+      <Text style={styles.treeMemberNotes} numberOfLines={3}>
+        {notesPreview}
+      </Text>
     </View>
   );
 };
@@ -2783,10 +2898,10 @@ const TreePanel = ({
     return 2;
   }, [familySectionWidth]);
   const memberCardWidth = useMemo(
-    () => clamp(Math.floor((familySectionWidth - 36 - (memberCardsPerRow - 1) * 12) / memberCardsPerRow), 170, 236),
+    () => clamp(Math.floor((familySectionWidth - 36 - (memberCardsPerRow - 1) * 12) / memberCardsPerRow), 190, 252),
     [familySectionWidth, memberCardsPerRow],
   );
-  const memberCardHeight = useMemo(() => Math.round(memberCardWidth * 1.32), [memberCardWidth]);
+  const memberCardHeight = useMemo(() => Math.round(memberCardWidth * 1.52), [memberCardWidth]);
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -3934,6 +4049,107 @@ const styles = StyleSheet.create({
     color: "#48695d",
     fontWeight: "600",
   },
+  memberCardColumn: {
+    gap: 10,
+    marginBottom: 8,
+  },
+  memberCardGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  memberDetailCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    minHeight: 170,
+  },
+  memberDetailHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  memberDetailAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    backgroundColor: "#ffffff",
+  },
+  memberDetailAvatarFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    backgroundColor: "#eef5f2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  memberDetailAvatarInitials: {
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  memberDetailHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  memberDetailName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1b2e29",
+    lineHeight: 18,
+  },
+  memberDetailFamily: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#3a5a4f",
+  },
+  memberDetailTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  memberDetailTag: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+  },
+  memberDetailTagText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  memberDetailStatusTag: {
+    borderRadius: 999,
+    backgroundColor: "#d43838",
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  memberDetailStatusTagText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  memberDetailMetaLine: {
+    fontSize: 12,
+    color: "#355247",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  memberDetailNotes: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#49685d",
+    fontWeight: "500",
+  },
   label: {
     marginBottom: 4,
     fontWeight: "600",
@@ -4357,41 +4573,36 @@ const styles = StyleSheet.create({
   },
   treePersonTile: {
     flex: 0,
-    position: "relative",
     borderWidth: 1,
     borderColor: "#d8e3df",
     borderRadius: 12,
-    paddingTop: 50,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     paddingHorizontal: 10,
     backgroundColor: "#ffffff",
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "flex-start",
+    gap: 7,
   },
   treePersonTilePortrait: {
     flex: 0,
   },
   treePersonAvatarWrap: {
-    position: "absolute",
-    top: -36,
-    borderWidth: 3,
-    borderRadius: 40,
-    padding: 2,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 2,
+    borderRadius: 28,
+    padding: 1,
+    alignSelf: "flex-start",
   },
   treePersonHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    alignItems: "center",
+    gap: 9,
   },
   treePersonDetailColumn: {
-    width: "100%",
-    alignItems: "center",
-    gap: 4,
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+    gap: 2,
   },
   memberPhoto: {
     borderWidth: 2,
@@ -4408,11 +4619,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   treeName: {
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#1b2e29",
     fontSize: 14,
     lineHeight: 18,
-    textAlign: "center",
+    textAlign: "left",
   },
   treeToggle: {
     fontSize: 11,
@@ -4427,10 +4638,9 @@ const styles = StyleSheet.create({
   },
   treeMeta: {
     color: "#2f4740",
-    marginTop: 2,
     fontSize: 12,
     fontWeight: "700",
-    textAlign: "center",
+    textAlign: "left",
   },
   treeMetaSecondary: {
     color: "#415b53",
@@ -4452,11 +4662,27 @@ const styles = StyleSheet.create({
     color: "#2f4740",
     fontSize: 11,
     fontWeight: "600",
-    textAlign: "center",
+    textAlign: "left",
     lineHeight: 14,
   },
+  treeMetaBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  treeMetaBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+  },
+  treeMetaBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "capitalize",
+  },
   treeStatusBadge: {
-    marginTop: 2,
     backgroundColor: "#f45151",
     borderRadius: 999,
     paddingVertical: 2,
@@ -4466,6 +4692,13 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 10,
     fontWeight: "800",
+  },
+  treeMemberNotes: {
+    marginTop: 1,
+    fontSize: 11,
+    lineHeight: 15,
+    color: "#49685d",
+    fontWeight: "500",
   },
   treeDepthLimitText: {
     marginTop: 8,
