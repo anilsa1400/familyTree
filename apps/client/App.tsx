@@ -2698,16 +2698,12 @@ const TreeNode = ({
 
   const membersForNode = partner ? [person, partner] : [person];
   const shouldStackNodeMembers = viewMode === "TILE" && membersForNode.length > 1;
-  const pairPenalty = shouldStackNodeMembers ? 0 : membersForNode.length > 1 ? 8 : 0;
-  const depthPenalty = depth * 6;
-  const maxDepthWidth = cardWidth;
-  const minDepthWidth = shouldStackNodeMembers ? 188 : 176;
-  const depthAdjustedCardWidth = clamp(cardWidth - depthPenalty - pairPenalty, minDepthWidth, maxDepthWidth);
-  const depthAdjustedCardHeight = Math.max(Math.round(cardHeight * (depthAdjustedCardWidth / cardWidth)), 210);
+  const depthAdjustedCardWidth = cardWidth;
+  const depthAdjustedCardHeight = cardHeight;
   const treeCardContentWidth = shouldStackNodeMembers
     ? depthAdjustedCardWidth
     : depthAdjustedCardWidth * membersForNode.length + (membersForNode.length - 1) * 12;
-  const treeCardMinWidth = Math.max(treeCardContentWidth + 16, 220);
+  const treeCardMinWidth = Math.max(treeCardContentWidth + 16, depthAdjustedCardWidth + 16);
   const resolveSpouseNamesForPerson = (nodePersonId: string) => {
     const spouseNames = new Set<string>();
     (spouseByPerson.get(nodePersonId) ?? []).forEach((relation) => {
@@ -3297,6 +3293,7 @@ const styles = StyleSheet.create({
   treeNode: {
     marginBottom: 14,
     alignSelf: "flex-start",
+    overflow: "visible",
   },
   treeRootNode: {
     alignSelf: "center",
@@ -3312,6 +3309,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     alignItems: "center",
     alignSelf: "flex-start",
+    overflow: "visible",
   },
   treeCardList: {
     borderRadius: 10,
@@ -3341,7 +3339,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "flex-start",
     gap: 12,
-    flexWrap: "nowrap",
+    flexWrap: "wrap",
     alignSelf: "flex-start",
   },
   treeMemberCardsRowStacked: {
@@ -3371,6 +3369,7 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     borderLeftWidth: 2,
     borderLeftColor: "#596862",
+    overflow: "visible",
   },
   treeChildItem: {
     position: "relative",
