@@ -13,7 +13,8 @@ type MemberDetailsCardProps = {
   isSelected: boolean;
   cardWidth: number | "100%";
   onPress: () => void;
-  onShowRelations?: (personId: string) => void;
+  onShowSpouse?: (personId: string) => void;
+  onShowChildren?: (personId: string) => void;
 };
 
 export const MemberDetailsCard = ({
@@ -25,7 +26,8 @@ export const MemberDetailsCard = ({
   isSelected,
   cardWidth,
   onPress,
-  onShowRelations,
+  onShowSpouse,
+  onShowChildren,
 }: MemberDetailsCardProps) => {
   const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
   const notesPreview = person.notes?.trim() || "No notes provided.";
@@ -71,17 +73,30 @@ export const MemberDetailsCard = ({
         {notesPreview}
       </Text>
 
-      {onShowRelations ? (
+      {onShowSpouse || onShowChildren ? (
         <View style={styles.memberCardActionRow}>
-          <Pressable
-            style={[styles.relationsButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}
-            onPress={(event) => {
-              event.stopPropagation();
-              onShowRelations(person.id);
-            }}
-          >
-            <Text style={[styles.relationsButtonText, { color: primaryColor }]}>Show Relations</Text>
-          </Pressable>
+          {onShowSpouse ? (
+            <Pressable
+              style={[styles.relationsButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}
+              onPress={(event) => {
+                event.stopPropagation();
+                onShowSpouse(person.id);
+              }}
+            >
+              <Text style={[styles.relationsButtonText, { color: primaryColor }]}>Show Spouse</Text>
+            </Pressable>
+          ) : null}
+          {onShowChildren ? (
+            <Pressable
+              style={[styles.relationsButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}
+              onPress={(event) => {
+                event.stopPropagation();
+                onShowChildren(person.id);
+              }}
+            >
+              <Text style={[styles.relationsButtonText, { color: primaryColor }]}>Show Children</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </Pressable>
@@ -159,13 +174,19 @@ const styles = StyleSheet.create({
   },
   memberCardActionRow: {
     marginTop: 8,
-    alignItems: "flex-end",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    width: "100%",
   },
   relationsButton: {
     borderWidth: 1,
     borderRadius: 999,
     paddingVertical: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
   },
   relationsButtonText: {
     fontSize: 11,

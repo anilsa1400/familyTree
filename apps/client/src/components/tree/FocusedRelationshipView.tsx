@@ -6,9 +6,14 @@ import { uiCommonStyles } from "../../styles/uiStyles";
 import { TreePersonCard } from "./TreePersonCard";
 
 type SectionViewMode = "TILE" | "LIST";
+type TreeFocusRelationFilters = {
+  showSpouse: boolean;
+  showChildren: boolean;
+};
 
 type FocusedRelationshipViewProps = {
   focusedPerson: Person;
+  parentGenerations: Person[][];
   spouses: Person[];
   children: Person[];
   primaryColor: string;
@@ -19,7 +24,10 @@ type FocusedRelationshipViewProps = {
   cardHeight: number;
   familyNameByPersonId: Map<string, string>;
   spouseNamesByPersonId: Map<string, string[]>;
+  relationFilters: TreeFocusRelationFilters;
   onSelectPerson: (personId: string) => void;
+  onShowSpouse: (personId: string) => void;
+  onShowChildren: (personId: string) => void;
   onClearFocus: () => void;
 };
 
@@ -30,6 +38,7 @@ const clampValue = (value: number, min: number, max: number) => Math.min(Math.ma
 
 export const FocusedRelationshipView = ({
   focusedPerson,
+  parentGenerations,
   spouses,
   children,
   primaryColor,
@@ -40,14 +49,22 @@ export const FocusedRelationshipView = ({
   cardHeight,
   familyNameByPersonId,
   spouseNamesByPersonId,
+  relationFilters,
   onSelectPerson,
+  onShowSpouse,
+  onShowChildren,
   onClearFocus,
 }: FocusedRelationshipViewProps) => {
   const { width: screenWidth } = useWindowDimensions();
-  const hasChildren = children.length > 0;
+  const hasRelationFilter = relationFilters.showSpouse || relationFilters.showChildren;
+  const showSpouseSection = hasRelationFilter ? relationFilters.showSpouse : true;
+  const showChildrenSection = hasRelationFilter ? relationFilters.showChildren : true;
+  const ancestorRows = [...parentGenerations].reverse();
+  const hasParents = ancestorRows.length > 0;
+  const hasChildren = showChildrenSection && children.length > 0;
   const primarySpouse = spouses[0] ?? null;
   const additionalSpouses = spouses.slice(1);
-  const hasPrimarySpouse = Boolean(primarySpouse);
+  const hasPrimarySpouse = showSpouseSection && Boolean(primarySpouse);
 
   const isSmallScreen = screenWidth < 560;
   const lineThickness = 2;
@@ -68,13 +85,28 @@ export const FocusedRelationshipView = ({
   const childrenTrackWidth = hasChildren
     ? children.length * focusedCardWidth + Math.max(0, children.length - 1) * childrenGap
     : focusedCardWidth;
+  const parentGenerationsTrackWidth = hasParents
+    ? ancestorRows.reduce(
+        (maxWidth, generationRow) =>
+          Math.max(
+            maxWidth,
+            generationRow.length * focusedCardWidth +
+              Math.max(0, generationRow.length - 1) * childrenGap,
+          ),
+        focusedCardWidth,
+      )
+    : focusedCardWidth;
   const childrenBranchWidth = Math.max(0, childrenTrackWidth - focusedCardWidth);
 
   const parentPairWidth = hasPrimarySpouse ? focusedCardWidth * 2 + spouseConnectorWidth : focusedCardWidth;
   const parentLeftCenter = cardCenter;
   const parentRightCenter = hasPrimarySpouse ? focusedCardWidth + spouseConnectorWidth + cardCenter : cardCenter;
   const parentMiddleCenter = Math.round((parentLeftCenter + parentRightCenter) / 2);
-  const relationshipTrackWidth = Math.max(parentPairWidth, childrenTrackWidth);
+  const relationshipTrackWidth = Math.max(
+    parentPairWidth,
+    childrenTrackWidth,
+    parentGenerationsTrackWidth,
+  );
 
   return (
     <View
@@ -99,12 +131,40 @@ export const FocusedRelationshipView = ({
         </Pressable>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.relationshipCanvasScrollContent}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.relationshipCanvasScrollContent}>
         <View style={[styles.relationshipCanvas, { width: relationshipTrackWidth }]}>
+          {hasParents ? (
+            <>
+              {ancestorRows.map((generationRow, generationIndex) => (
+                <View key={`ancestor-generation-${generationIndex}`} style={styles.ancestorGenerationBlock}>
+                  <View style={styles.directionHeaderRow}>
+                    <Text style={[styles.directionLabel, { color: primaryColor }]}>
+                      {generationIndex === ancestorRows.length - 1 ? "Parents" : "Upper Generation"}
+                    </Text>
+                  </View>
+                  <View style={[styles.parentsRow, { gap: childrenGap }]}>
+                    {generationRow.map((parent) => (
+                      <TreePersonCard
+                        key={`focused-parent-${generationIndex}-${parent.id}`}
+                        person={parent}
+                        primaryColor={primaryColor}
+                        showMemberPhotos={showMemberPhotos}
+                        familyName={familyNameForPerson(parent, familyNameByPersonId)}
+                        viewMode={viewMode}
+                        cardWidth={focusedCardWidth}
+                        cardHeight={focusedCardHeight}
+                        spouseNames={spouseNamesByPersonId.get(parent.id) ?? []}
+                        onPressPerson={onSelectPerson}
+                        onShowSpouse={onShowSpouse}
+                        onShowChildren={onShowChildren}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </>
+          ) : null}
+
           <View
             style={[
               styles.partnerSpouseRow,
@@ -127,6 +187,10 @@ export const FocusedRelationshipView = ({
                 }
                 onSelectPerson(personId);
               }}
+              onShowSpouse={onShowSpouse}
+              onShowChildren={onShowChildren}
+              isShowSpouseActive={relationFilters.showSpouse}
+              isShowChildrenActive={relationFilters.showChildren}
               isFocused
             />
 
@@ -146,16 +210,22 @@ export const FocusedRelationshipView = ({
                   cardHeight={focusedCardHeight}
                   spouseNames={spouseNamesByPersonId.get(primarySpouse.id) ?? []}
                   onPressPerson={onSelectPerson}
+                  onShowSpouse={onShowSpouse}
+                  onShowChildren={onShowChildren}
                 />
               </View>
+            ) : showSpouseSection ? (
+              <Text style={styles.emptyRelationText}>No spouse linked.</Text>
             ) : null}
           </View>
 
-          <View style={styles.directionHeaderRow}>
-            <Text style={[styles.directionLabel, { color: primaryColor }]}>Children</Text>
-          </View>
+          {showChildrenSection ? (
+            <View style={styles.directionHeaderRow}>
+              <Text style={[styles.directionLabel, { color: primaryColor }]}>Children</Text>
+            </View>
+          ) : null}
 
-          {hasChildren ? (
+          {showChildrenSection && hasChildren ? (
             <>
               <View style={[styles.parentChildrenBridge, { width: parentPairWidth }]}>
                 {hasPrimarySpouse ? (
@@ -230,19 +300,21 @@ export const FocusedRelationshipView = ({
                         cardHeight={focusedCardHeight}
                         spouseNames={spouseNamesByPersonId.get(child.id) ?? []}
                         onPressPerson={onSelectPerson}
+                        onShowSpouse={onShowSpouse}
+                        onShowChildren={onShowChildren}
                       />
                     </View>
                   ))}
                 </View>
               </View>
             </>
-          ) : (
+          ) : showChildrenSection ? (
             <Text style={styles.emptyRelationText}>No direct children linked.</Text>
-          )}
+          ) : null}
         </View>
       </ScrollView>
 
-      {additionalSpouses.length > 0 ? (
+      {showSpouseSection && additionalSpouses.length > 0 ? (
         <View style={styles.additionalSpousesRow}>
           {additionalSpouses.map((spouse) => (
             <View key={`focused-spouse-extra-${spouse.id}`} style={styles.additionalSpouseItem}>
@@ -260,6 +332,8 @@ export const FocusedRelationshipView = ({
                 cardHeight={focusedCardHeight}
                 spouseNames={spouseNamesByPersonId.get(spouse.id) ?? []}
                 onPressPerson={onSelectPerson}
+                onShowSpouse={onShowSpouse}
+                onShowChildren={onShowChildren}
               />
             </View>
           ))}
@@ -333,6 +407,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 0,
+  },
+  ancestorGenerationBlock: {
+    width: "100%",
+    marginBottom: 4,
+  },
+  parentsRow: {
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
   },
   directionHeaderRow: {
     marginTop: 8,

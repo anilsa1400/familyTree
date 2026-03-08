@@ -16,6 +16,10 @@ type TreePersonCardProps = {
   cardHeight: number;
   spouseNames?: string[];
   onPressPerson?: (personId: string) => void;
+  onShowSpouse?: (personId: string) => void;
+  onShowChildren?: (personId: string) => void;
+  isShowSpouseActive?: boolean;
+  isShowChildrenActive?: boolean;
   isFocused?: boolean;
 };
 
@@ -29,6 +33,10 @@ export const TreePersonCard = ({
   cardHeight,
   spouseNames = [],
   onPressPerson,
+  onShowSpouse,
+  onShowChildren,
+  isShowSpouseActive = false,
+  isShowChildrenActive = false,
   isFocused = false,
 }: TreePersonCardProps) => {
   const avatarSize = viewMode === "TILE" ? 54 : 48;
@@ -103,6 +111,45 @@ export const TreePersonCard = ({
       <Text style={styles.treeMemberNotes} numberOfLines={3}>
         {notesPreview}
       </Text>
+
+      {onShowSpouse || onShowChildren ? (
+        <View style={styles.treeActionRow}>
+          {onShowSpouse ? (
+            <Pressable
+              style={[
+                styles.treeActionButton,
+                { borderColor: primaryColor },
+                isShowSpouseActive && { backgroundColor: primaryColor },
+              ]}
+              onPress={(event) => {
+                event.stopPropagation();
+                onShowSpouse(person.id);
+              }}
+            >
+              <Text style={[styles.treeActionButtonText, { color: isShowSpouseActive ? "#ffffff" : primaryColor }]}>
+                Show Spouse
+              </Text>
+            </Pressable>
+          ) : null}
+          {onShowChildren ? (
+            <Pressable
+              style={[
+                styles.treeActionButton,
+                { borderColor: primaryColor },
+                isShowChildrenActive && { backgroundColor: primaryColor },
+              ]}
+              onPress={(event) => {
+                event.stopPropagation();
+                onShowChildren(person.id);
+              }}
+            >
+              <Text style={[styles.treeActionButtonText, { color: isShowChildrenActive ? "#ffffff" : primaryColor }]}>
+                Show Children
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </Pressable>
   );
 };
@@ -204,5 +251,27 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     color: "#49685d",
     fontWeight: "500",
+  },
+  treeActionRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    width: "100%",
+  },
+  treeActionButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  treeActionButtonText: {
+    fontSize: 10,
+    fontWeight: "700",
   },
 });

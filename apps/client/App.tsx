@@ -49,6 +49,11 @@ type TabKey = "TREE" | "MEMBERS" | "RELATIONSHIPS" | "FAMILIES";
 type AppPage = "HOME" | "SETTINGS";
 type LayoutMode = "SIDEBAR" | "TOOLBAR";
 type SectionViewMode = "TILE" | "LIST";
+type TreeFocusRelationFilter = "SPOUSE" | "CHILDREN";
+type TreeFocusRelationFilters = {
+  showSpouse: boolean;
+  showChildren: boolean;
+};
 type ThemePresetId = "FOREST" | "OCEAN" | "SUNSET" | "GRAPHITE";
 type ThemeEditorMode = "PRESET" | "CUSTOMIZE";
 
@@ -227,6 +232,11 @@ const defaultSectionViewModeByTab: Record<TabKey, SectionViewMode> = {
   FAMILIES: "TILE",
 };
 
+const defaultTreeFocusRelationFilters: TreeFocusRelationFilters = {
+  showSpouse: false,
+  showChildren: false,
+};
+
 const App = () => {
   const { width } = useWindowDimensions();
   const isWideLayout = width >= 980;
@@ -242,6 +252,9 @@ const App = () => {
   const [showMemberPhotos, setShowMemberPhotos] = useState(true);
   const [selectedFamilyName, setSelectedFamilyName] = useState<string | null>(null);
   const [focusedTreePersonId, setFocusedTreePersonId] = useState<string | null>(null);
+  const [focusedTreeRelationFilters, setFocusedTreeRelationFilters] = useState<TreeFocusRelationFilters>(
+    defaultTreeFocusRelationFilters,
+  );
   const [sectionViewModeByTab, setSectionViewModeByTab] = useState<Record<TabKey, SectionViewMode>>(
     defaultSectionViewModeByTab,
   );
@@ -655,14 +668,18 @@ const App = () => {
 
   useEffect(() => {
     if (!focusedTreePersonId) {
+      if (focusedTreeRelationFilters.showSpouse || focusedTreeRelationFilters.showChildren) {
+        setFocusedTreeRelationFilters(defaultTreeFocusRelationFilters);
+      }
       return;
     }
 
     const focusedExists = graph.persons.some((person) => person.id === focusedTreePersonId);
     if (!focusedExists) {
       setFocusedTreePersonId(null);
+      setFocusedTreeRelationFilters(defaultTreeFocusRelationFilters);
     }
-  }, [focusedTreePersonId, graph.persons]);
+  }, [focusedTreePersonId, focusedTreeRelationFilters, graph.persons]);
 
   const homeHeaderByTab: Record<TabKey, { title: string; description: string }> = {
     TREE: {
@@ -716,6 +733,21 @@ const App = () => {
     setActiveTab("TREE");
     setSelectedFamilyName(null);
     setFocusedTreePersonId(personId);
+    setFocusedTreeRelationFilters(defaultTreeFocusRelationFilters);
+  };
+
+  const toggleTreeRelationFilter = (personId: string, relationFilter: TreeFocusRelationFilter) => {
+    setActivePage("HOME");
+    setActiveTab("TREE");
+    setSelectedFamilyName(null);
+    setFocusedTreePersonId(personId);
+    setFocusedTreeRelationFilters((previous) => {
+      const baseline =
+        focusedTreePersonId === personId ? previous : defaultTreeFocusRelationFilters;
+      return relationFilter === "SPOUSE"
+        ? { ...baseline, showSpouse: !baseline.showSpouse }
+        : { ...baseline, showChildren: !baseline.showChildren };
+    });
   };
 
   return (
@@ -953,8 +985,13 @@ const App = () => {
                         }))
                       }
                       focusedTreePersonId={focusedTreePersonId}
+                      focusedTreeRelationFilters={focusedTreeRelationFilters}
                       onFocusPerson={openTreeFocus}
-                      onClearFocusPerson={() => setFocusedTreePersonId(null)}
+                      onToggleFocusRelationFilter={toggleTreeRelationFilter}
+                      onClearFocusPerson={() => {
+                        setFocusedTreePersonId(null);
+                        setFocusedTreeRelationFilters(defaultTreeFocusRelationFilters);
+                      }}
                       onRefresh={handleRefresh}
                       isRefreshing={showRefreshIndicator}
                     />
@@ -1638,7 +1675,8 @@ const MembersPanel = ({
                         isSelected={selectedPersonId === person.id}
                         cardWidth={"100%"}
                         onPress={() => openMemberModal(person)}
-                        onShowRelations={showRelationsForPerson}
+                        onShowSpouse={showRelationsForPerson}
+                        onShowChildren={showRelationsForPerson}
                       />
                     );
                   })}
@@ -1673,7 +1711,8 @@ const MembersPanel = ({
                       isSelected={selectedPersonId === person.id}
                       cardWidth={tileMemberCardWidth}
                       onPress={() => openMemberModal(person)}
-                      onShowRelations={showRelationsForPerson}
+                      onShowSpouse={showRelationsForPerson}
+                      onShowChildren={showRelationsForPerson}
                     />
                   );
                 })}
@@ -2203,7 +2242,9 @@ type TreePanelProps = {
   viewMode: SectionViewMode;
   onToggleViewMode: () => void;
   focusedTreePersonId: string | null;
+  focusedTreeRelationFilters: TreeFocusRelationFilters;
   onFocusPerson: (personId: string) => void;
+  onToggleFocusRelationFilter: (personId: string, relationFilter: TreeFocusRelationFilter) => void;
   onClearFocusPerson: () => void;
   onRefresh: () => Promise<void>;
   isRefreshing: boolean;
@@ -2247,7 +2288,9 @@ const TreePanel = ({
   viewMode,
   onToggleViewMode,
   focusedTreePersonId,
+  focusedTreeRelationFilters,
   onFocusPerson,
+  onToggleFocusRelationFilter,
   onClearFocusPerson,
   onRefresh,
   isRefreshing,
@@ -2293,6 +2336,18 @@ const TreePanel = ({
       const children = map.get(relation.parentId) ?? [];
       children.push(relation.childId);
       map.set(relation.parentId, children);
+    });
+
+    return map;
+  }, [graph.parentChildRelations]);
+
+  const parentIdsByChild = useMemo(() => {
+    const map = new Map<string, string[]>();
+
+    graph.parentChildRelations.forEach((relation) => {
+      const parents = map.get(relation.childId) ?? [];
+      parents.push(relation.parentId);
+      map.set(relation.childId, parents);
     });
 
     return map;
@@ -2376,6 +2431,41 @@ const TreePanel = ({
       .filter((value): value is Person => Boolean(value))
       .sort((left, right) => displayName(left).localeCompare(displayName(right)));
   }, [focusedPerson, spouseIdsByPerson, personById]);
+
+  const focusedAncestorGenerations = useMemo(() => {
+    if (!focusedPerson) {
+      return [];
+    }
+
+    const seen = new Set<string>([focusedPerson.id]);
+    const generations: Person[][] = [];
+    let currentLevelParentIds = Array.from(new Set(parentIdsByChild.get(focusedPerson.id) ?? []));
+
+    while (currentLevelParentIds.length > 0 && generations.length < MAX_GENERATION_DEPTH) {
+      const uniqueLevelParentIds = Array.from(new Set(currentLevelParentIds)).filter(
+        (parentId) => !seen.has(parentId),
+      );
+      if (uniqueLevelParentIds.length === 0) {
+        break;
+      }
+
+      uniqueLevelParentIds.forEach((parentId) => seen.add(parentId));
+      const personsInGeneration = uniqueLevelParentIds
+        .map((parentId) => personById.get(parentId))
+        .filter((value): value is Person => Boolean(value))
+        .sort((left, right) => displayName(left).localeCompare(displayName(right)));
+
+      if (personsInGeneration.length > 0) {
+        generations.push(personsInGeneration);
+      }
+
+      currentLevelParentIds = uniqueLevelParentIds.flatMap(
+        (parentId) => parentIdsByChild.get(parentId) ?? [],
+      );
+    }
+
+    return generations;
+  }, [focusedPerson, parentIdsByChild, personById]);
 
   const focusedChildren = useMemo(() => {
     if (!focusedPerson) {
@@ -2585,6 +2675,9 @@ const TreePanel = ({
                 showMemberPhotos={showMemberPhotos}
                 onToggle={toggleNode}
                 onFocusPerson={onFocusPerson}
+                focusedTreePersonId={focusedTreePersonId}
+                focusedTreeRelationFilters={focusedTreeRelationFilters}
+                onToggleFocusRelationFilter={onToggleFocusRelationFilter}
                 cardWidth={memberCardWidth}
                 cardHeight={memberCardHeight}
               />
@@ -2600,7 +2693,13 @@ const TreePanel = ({
         title="Family Tree"
         hint={
           focusedPerson
-            ? "Focused view: horizontal links show spouse(s), vertical links show direct children."
+            ? focusedTreeRelationFilters.showSpouse && focusedTreeRelationFilters.showChildren
+              ? "Focused view shows spouse and direct children. Tap either button again to unselect."
+              : focusedTreeRelationFilters.showSpouse
+                ? "Focused view is filtered to spouse links. Tap Show Spouse again to unselect."
+                : focusedTreeRelationFilters.showChildren
+                  ? "Focused view is filtered to direct children links. Tap Show Children again to unselect."
+                  : "Focused view: horizontal links show spouse(s), vertical links show direct children."
             : `Tap a member card to focus relationships. Use +/- to expand/collapse descendants. Depth is limited to ${MAX_GENERATION_DEPTH} generations.`
         }
         actions={
@@ -2640,6 +2739,7 @@ const TreePanel = ({
       {focusedPerson ? (
         <FocusedRelationshipView
           focusedPerson={focusedPerson}
+          parentGenerations={focusedAncestorGenerations}
           spouses={focusedSpouses}
           children={focusedChildren}
           primaryColor={primaryColor}
@@ -2650,7 +2750,10 @@ const TreePanel = ({
           cardHeight={memberCardHeight}
           familyNameByPersonId={familyNameByPersonId}
           spouseNamesByPersonId={spouseNamesByPersonId}
+          relationFilters={focusedTreeRelationFilters}
           onSelectPerson={onFocusPerson}
+          onShowSpouse={(personId) => onToggleFocusRelationFilter(personId, "SPOUSE")}
+          onShowChildren={(personId) => onToggleFocusRelationFilter(personId, "CHILDREN")}
           onClearFocus={onClearFocusPerson}
         />
       ) : rootNodes.length === 0 ? (
@@ -2691,6 +2794,9 @@ type TreeNodeProps = {
   showMemberPhotos: boolean;
   onToggle: (personId: string, partnerId?: string) => void;
   onFocusPerson: (personId: string) => void;
+  focusedTreePersonId: string | null;
+  focusedTreeRelationFilters: TreeFocusRelationFilters;
+  onToggleFocusRelationFilter: (personId: string, relationFilter: TreeFocusRelationFilter) => void;
   cardWidth: number;
   cardHeight: number;
 };
@@ -2712,6 +2818,9 @@ const TreeNode = ({
   showMemberPhotos,
   onToggle,
   onFocusPerson,
+  focusedTreePersonId,
+  focusedTreeRelationFilters,
+  onToggleFocusRelationFilter,
   cardWidth,
   cardHeight,
 }: TreeNodeProps) => {
@@ -2839,6 +2948,10 @@ const TreeNode = ({
               cardHeight={depthAdjustedCardHeight}
               spouseNames={resolveSpouseNamesForPerson(nodeMember.id)}
               onPressPerson={onFocusPerson}
+              onShowSpouse={(id) => onToggleFocusRelationFilter(id, "SPOUSE")}
+              onShowChildren={(id) => onToggleFocusRelationFilter(id, "CHILDREN")}
+              isShowSpouseActive={focusedTreePersonId === nodeMember.id && focusedTreeRelationFilters.showSpouse}
+              isShowChildrenActive={focusedTreePersonId === nodeMember.id && focusedTreeRelationFilters.showChildren}
             />
           ))}
         </View>
@@ -2873,6 +2986,9 @@ const TreeNode = ({
                 showMemberPhotos={showMemberPhotos}
                 onToggle={onToggle}
                 onFocusPerson={onFocusPerson}
+                focusedTreePersonId={focusedTreePersonId}
+                focusedTreeRelationFilters={focusedTreeRelationFilters}
+                onToggleFocusRelationFilter={onToggleFocusRelationFilter}
                 cardWidth={cardWidth}
                 cardHeight={cardHeight}
               />
