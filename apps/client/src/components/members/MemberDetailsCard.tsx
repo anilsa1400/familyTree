@@ -13,6 +13,7 @@ type MemberDetailsCardProps = {
   isSelected: boolean;
   cardWidth: number | "100%";
   onPress: () => void;
+  onShowRelations?: (personId: string) => void;
 };
 
 export const MemberDetailsCard = ({
@@ -24,6 +25,7 @@ export const MemberDetailsCard = ({
   isSelected,
   cardWidth,
   onPress,
+  onShowRelations,
 }: MemberDetailsCardProps) => {
   const genderLabel = person.gender ? person.gender.replace(/_/g, " ") : "Unspecified";
   const notesPreview = person.notes?.trim() || "No notes provided.";
@@ -68,6 +70,20 @@ export const MemberDetailsCard = ({
       <Text style={styles.memberDetailNotes} numberOfLines={3}>
         {notesPreview}
       </Text>
+
+      {onShowRelations ? (
+        <View style={styles.memberCardActionRow}>
+          <Pressable
+            style={[styles.relationsButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}
+            onPress={(event) => {
+              event.stopPropagation();
+              onShowRelations(person.id);
+            }}
+          >
+            <Text style={[styles.relationsButtonText, { color: primaryColor }]}>Show Relations</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </Pressable>
   );
 };
@@ -140,5 +156,19 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: "#49685d",
     fontWeight: "500",
+  },
+  memberCardActionRow: {
+    marginTop: 8,
+    alignItems: "flex-end",
+  },
+  relationsButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  relationsButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

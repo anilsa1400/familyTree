@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MemberAvatar } from "../common/MemberAvatar";
 import { Person } from "../../types/family";
 import { displayName, formatDate } from "../../lib/familyUtils";
@@ -15,6 +15,8 @@ type TreePersonCardProps = {
   cardWidth: number;
   cardHeight: number;
   spouseNames?: string[];
+  onPressPerson?: (personId: string) => void;
+  isFocused?: boolean;
 };
 
 export const TreePersonCard = ({
@@ -26,6 +28,8 @@ export const TreePersonCard = ({
   cardWidth,
   cardHeight,
   spouseNames = [],
+  onPressPerson,
+  isFocused = false,
 }: TreePersonCardProps) => {
   const avatarSize = viewMode === "TILE" ? 54 : 48;
   const spouseSummary = spouseNames.slice(0, 2).join(", ");
@@ -37,14 +41,16 @@ export const TreePersonCard = ({
   const notesPreview = person.notes?.trim() || "No notes provided.";
 
   return (
-    <View
+    <Pressable
       style={[
         styles.treePersonTile,
         viewMode === "TILE" && styles.treePersonTilePortrait,
         { width: cardWidth, minHeight: cardHeight },
+        isFocused && { borderWidth: 2, borderColor: primaryColor },
         { borderColor: primaryColor, backgroundColor: "#ffffff" },
         uiCommonStyles.shadowSoft,
       ]}
+      onPress={onPressPerson ? () => onPressPerson(person.id) : undefined}
     >
       <View style={styles.treePersonHeaderRow}>
         <View style={[styles.treePersonAvatarWrap, { borderColor: primaryColor, backgroundColor: "#ffffff" }]}>
@@ -97,7 +103,7 @@ export const TreePersonCard = ({
       <Text style={styles.treeMemberNotes} numberOfLines={3}>
         {notesPreview}
       </Text>
-    </View>
+    </Pressable>
   );
 };
 

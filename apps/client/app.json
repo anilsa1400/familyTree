@@ -25,6 +25,14 @@
       },
       "predictiveBackGestureEnabled": false
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Family Tree to access your photos to update member profile pictures."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }

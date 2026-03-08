@@ -30,9 +30,10 @@ import { toPersonDbInput, toSpouseDbInput } from "./transform";
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
+const jsonBodyLimit = process.env.JSON_BODY_LIMIT || "25mb";
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: jsonBodyLimit }));
 
 const nowIso = () => new Date().toISOString();
 
@@ -492,6 +493,16 @@ app.delete("/api/relations/spouse", (req, res, next) => {
 });
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (isPayloadTooLargeError(error)) {
+    res.status(413).json({ message: "Uploaded image is too large. Please choose a smaller image." });
+    return;
+  }
+
+  if (isInvalidJsonError(error)) {
+    res.status(400).json({ message: "Invalid JSON payload." });
+    return;
+  }
+
   if (error instanceof ZodError) {
     res.status(400).json({ message: "Validation failed", errors: error.flatten() });
     return;
@@ -510,6 +521,33 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   console.error(error);
   res.status(500).json({ message: "Internal server error" });
 });
+
+const isPayloadTooLargeError = (
+  error: unknown,
+): error is { type?: string; status?: number; statusCode?: number } => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  const statusCode = (error as { statusCode?: unknown }).statusCode;
+  const type = (error as { type?: unknown }).type;
+
+  return status === 413 || statusCode === 413 || type === "entity.too.large";
+};
+
+const isInvalidJsonError = (
+  error: unknown,
+): error is SyntaxError & { status?: number; body?: unknown } => {
+  if (!(error instanceof SyntaxError)) {
+    return false;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  const body = (error as { body?: unknown }).body;
+
+  return status === 400 && body !== undefined;
+};
 
 const isSqliteConstraintError = (
   error: unknown,

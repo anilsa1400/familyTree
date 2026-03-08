@@ -7,7 +7,8 @@ type FamilyFilterSelectorProps = {
   familyNames: string[];
   selectedFamilyName: string | null;
   primaryColor: string;
-  onSelectFamily: (familyName: string) => void;
+  onSelectFamily: (familyName: string | null) => void;
+  allowAllFamilies?: boolean;
 };
 
 export const FamilyFilterSelector = ({
@@ -15,6 +16,7 @@ export const FamilyFilterSelector = ({
   selectedFamilyName,
   primaryColor,
   onSelectFamily,
+  allowAllFamilies = true,
 }: FamilyFilterSelectorProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,7 +29,8 @@ export const FamilyFilterSelector = ({
   const filteredFamilyNames = normalizedQuery
     ? familyNames.filter((familyName) => familyName.toLowerCase().includes(normalizedQuery))
     : familyNames;
-  const selectedLabel = selectedFamilyName ?? "Select family";
+  const selectedLabel =
+    selectedFamilyName ?? (allowAllFamilies ? "All Families" : familyNames[0] ?? "Select Family");
 
   return (
     <View style={styles.familyFilterBlock}>
@@ -85,6 +88,23 @@ export const FamilyFilterSelector = ({
                 style={[styles.familyDropdownSearchInput, { borderColor: primaryColor }]}
               />
               <ScrollView style={styles.familyDropdownList} nestedScrollEnabled>
+                {allowAllFamilies ? (
+                  <Pressable
+                    style={[
+                      styles.familyDropdownOption,
+                      { borderColor: primaryColor },
+                      selectedFamilyName === null && { backgroundColor: `${primaryColor}1f` },
+                    ]}
+                    onPress={() => {
+                      onSelectFamily(null);
+                      setIsOpen(false);
+                      setSearchQuery("");
+                    }}
+                  >
+                    <Text style={[styles.familyDropdownOptionText, { color: primaryColor }]}>All Families</Text>
+                    {selectedFamilyName === null ? <Ionicons name="checkmark" size={15} color={primaryColor} /> : null}
+                  </Pressable>
+                ) : null}
                 {filteredFamilyNames.length > 0 ? (
                   filteredFamilyNames.map((familyName) => {
                     const isSelected = selectedFamilyName === familyName;

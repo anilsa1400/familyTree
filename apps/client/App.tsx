@@ -16,11 +16,13 @@ import {
 import { useFamilyTree } from "./src/hooks/useFamilyTree";
 import { API_BASE_URL, getUiSettings, UiSettingsPayload, updateUiSettings } from "./src/lib/api";
 import { MemberDetailsCard } from "./src/components/members/MemberDetailsCard";
+import { MemberDetailsModal } from "./src/components/members/MemberDetailsModal";
 import { ColorPickerField } from "./src/components/settings/ColorPickerField";
 import { SectionRefreshButton, SectionViewModeToggle, SettingsToggle } from "./src/components/common/SectionControls";
 import { FamilyFilterSelector } from "./src/components/common/FamilyFilterSelector";
 import { PanelHeader } from "./src/components/common/PanelHeader";
 import { OptionChip, OptionChips } from "./src/components/common/OptionChips";
+import { FocusedRelationshipView } from "./src/components/tree/FocusedRelationshipView";
 import { TreePersonCard } from "./src/components/tree/TreePersonCard";
 import { uiCommonStyles } from "./src/styles/uiStyles";
 import {
@@ -239,6 +241,7 @@ const App = () => {
   const [sidebarEnabled, setSidebarEnabled] = useState(false);
   const [showMemberPhotos, setShowMemberPhotos] = useState(true);
   const [selectedFamilyName, setSelectedFamilyName] = useState<string | null>(null);
+  const [focusedTreePersonId, setFocusedTreePersonId] = useState<string | null>(null);
   const [sectionViewModeByTab, setSectionViewModeByTab] = useState<Record<TabKey, SectionViewMode>>(
     defaultSectionViewModeByTab,
   );
@@ -645,10 +648,21 @@ const App = () => {
       return;
     }
 
-    if (!selectedFamilyName || !familyNames.includes(selectedFamilyName)) {
-      setSelectedFamilyName(familyNames[0]);
+    if (selectedFamilyName && !familyNames.includes(selectedFamilyName)) {
+      setSelectedFamilyName(null);
     }
   }, [familyNames, selectedFamilyName]);
+
+  useEffect(() => {
+    if (!focusedTreePersonId) {
+      return;
+    }
+
+    const focusedExists = graph.persons.some((person) => person.id === focusedTreePersonId);
+    if (!focusedExists) {
+      setFocusedTreePersonId(null);
+    }
+  }, [focusedTreePersonId, graph.persons]);
 
   const homeHeaderByTab: Record<TabKey, { title: string; description: string }> = {
     TREE: {
@@ -695,6 +709,13 @@ const App = () => {
     } finally {
       setIsRefreshing(false);
     }
+  };
+
+  const openTreeFocus = (personId: string) => {
+    setActivePage("HOME");
+    setActiveTab("TREE");
+    setSelectedFamilyName(null);
+    setFocusedTreePersonId(personId);
   };
 
   return (
@@ -931,6 +952,9 @@ const App = () => {
                           TREE: previous.TREE === "TILE" ? "LIST" : "TILE",
                         }))
                       }
+                      focusedTreePersonId={focusedTreePersonId}
+                      onFocusPerson={openTreeFocus}
+                      onClearFocusPerson={() => setFocusedTreePersonId(null)}
                       onRefresh={handleRefresh}
                       isRefreshing={showRefreshIndicator}
                     />
@@ -954,6 +978,7 @@ const App = () => {
                           MEMBERS: previous.MEMBERS === "TILE" ? "LIST" : "TILE",
                         }))
                       }
+                      onShowRelations={openTreeFocus}
                       onCreate={createPerson}
                       onUpdate={updatePerson}
                       onDelete={deletePerson}
@@ -1372,9 +1397,10 @@ type MembersPanelProps = {
   familyNameByPersonId: Map<string, string>;
   familyNames: string[];
   selectedFamilyName: string | null;
-  onSelectFamily: (familyName: string) => void;
+  onSelectFamily: (familyName: string | null) => void;
   viewMode: SectionViewMode;
   onToggleViewMode: () => void;
+  onShowRelations: (personId: string) => void;
   onCreate: (payload: PersonInput) => Promise<void>;
   onUpdate: (personId: string, payload: PersonInput) => Promise<void>;
   onDelete: (personId: string) => Promise<void>;
@@ -1394,6 +1420,7 @@ const MembersPanel = ({
   onSelectFamily,
   viewMode,
   onToggleViewMode,
+  onShowRelations,
   onCreate,
   onUpdate,
   onDelete,
@@ -1403,6 +1430,8 @@ const MembersPanel = ({
   const { width: screenWidth } = useWindowDimensions();
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [formState, setFormState] = useState<PersonFormState>(defaultFormState);
+  const [isMemberModalVisible, setIsMemberModalVisible] = useState(false);
+  const [activeMemberIdForModal, setActiveMemberIdForModal] = useState<string | null>(null);
   const listFamilyCardWidth = useMemo(() => clamp(screenWidth - 96, 240, 380), [screenWidth]);
   const tileMemberCardWidth = useMemo(() => {
     if (screenWidth < 640) {
@@ -1432,6 +1461,19 @@ const MembersPanel = ({
 
   const selectedPerson = sortedPersons.find((person) => person.id === selectedPersonId) ?? null;
   const selectedPersonFamilyName = selectedPerson ? familyNameByPersonId.get(selectedPerson.id) ?? "Unknown" : null;
+  const activeModalPerson = sortedPersons.find((person) => person.id === activeMemberIdForModal) ?? null;
+  const activeModalFamilyName = activeModalPerson
+    ? familyNameByPersonId.get(activeModalPerson.id) ?? familyNameFromLastName(activeModalPerson.lastName)
+    : "Unknown";
+  const visiblePersonIdSet = useMemo(
+    () =>
+      new Set(
+        visibleGroupedFamilies.flatMap((familyGroup) =>
+          familyGroup.members.map((familyMember) => familyMember.id),
+        ),
+      ),
+    [visibleGroupedFamilies],
+  );
 
   useEffect(() => {
     if (!selectedPersonId || !selectedFamilyName) {
@@ -1450,6 +1492,17 @@ const MembersPanel = ({
       setFormState(defaultFormState);
     }
   }, [familyNameByPersonId, selectedFamilyName, selectedPersonId, sortedPersons]);
+
+  useEffect(() => {
+    if (!activeMemberIdForModal) {
+      return;
+    }
+
+    if (!visiblePersonIdSet.has(activeMemberIdForModal)) {
+      setIsMemberModalVisible(false);
+      setActiveMemberIdForModal(null);
+    }
+  }, [activeMemberIdForModal, visiblePersonIdSet]);
 
   const selectPerson = (person: Person | null) => {
     if (!person) {
@@ -1493,6 +1546,22 @@ const MembersPanel = ({
 
     await onDelete(selectedPersonId);
     selectPerson(null);
+  };
+
+  const openMemberModal = (person: Person) => {
+    selectPerson(person);
+    setActiveMemberIdForModal(person.id);
+    setIsMemberModalVisible(true);
+  };
+
+  const closeMemberModal = () => {
+    setIsMemberModalVisible(false);
+    setActiveMemberIdForModal(null);
+  };
+
+  const showRelationsForPerson = (personId: string) => {
+    closeMemberModal();
+    onShowRelations(personId);
   };
 
   return (
@@ -1568,7 +1637,8 @@ const MembersPanel = ({
                         showMemberPhotos={showMemberPhotos}
                         isSelected={selectedPersonId === person.id}
                         cardWidth={"100%"}
-                        onPress={() => selectPerson(person)}
+                        onPress={() => openMemberModal(person)}
+                        onShowRelations={showRelationsForPerson}
                       />
                     );
                   })}
@@ -1602,7 +1672,8 @@ const MembersPanel = ({
                       showMemberPhotos={showMemberPhotos}
                       isSelected={selectedPersonId === person.id}
                       cardWidth={tileMemberCardWidth}
-                      onPress={() => selectPerson(person)}
+                      onPress={() => openMemberModal(person)}
+                      onShowRelations={showRelationsForPerson}
                     />
                   );
                 })}
@@ -1689,6 +1760,22 @@ const MembersPanel = ({
           </Pressable>
         ) : null}
       </View>
+
+      <MemberDetailsModal
+        visible={isMemberModalVisible}
+        person={activeModalPerson}
+        familyName={activeModalFamilyName}
+        primaryColor={primaryColor}
+        secondaryColor={secondaryColor}
+        showMemberPhotos={showMemberPhotos}
+        isMutating={isMutating}
+        onClose={closeMemberModal}
+        onShowRelations={showRelationsForPerson}
+        onSave={async (personId, payload) => {
+          await onUpdate(personId, payload);
+          setSelectedPersonId(personId);
+        }}
+      />
     </View>
   );
 };
@@ -1701,7 +1788,7 @@ type RelationshipsPanelProps = {
   familyNameByPersonId: Map<string, string>;
   familyNames: string[];
   selectedFamilyName: string | null;
-  onSelectFamily: (familyName: string) => void;
+  onSelectFamily: (familyName: string | null) => void;
   viewMode: SectionViewMode;
   onToggleViewMode: () => void;
   onCreateParentChild: (payload: { parentId: string; childId: string; relationType: ParentType }) => Promise<void>;
@@ -2112,9 +2199,12 @@ type TreePanelProps = {
   familyNameByPersonId: Map<string, string>;
   familyNames: string[];
   selectedFamilyName: string | null;
-  onSelectFamily: (familyName: string) => void;
+  onSelectFamily: (familyName: string | null) => void;
   viewMode: SectionViewMode;
   onToggleViewMode: () => void;
+  focusedTreePersonId: string | null;
+  onFocusPerson: (personId: string) => void;
+  onClearFocusPerson: () => void;
   onRefresh: () => Promise<void>;
   isRefreshing: boolean;
 };
@@ -2156,6 +2246,9 @@ const TreePanel = ({
   onSelectFamily,
   viewMode,
   onToggleViewMode,
+  focusedTreePersonId,
+  onFocusPerson,
+  onClearFocusPerson,
   onRefresh,
   isRefreshing,
 }: TreePanelProps) => {
@@ -2244,11 +2337,56 @@ const TreePanel = ({
     return map;
   }, [graph.spouseRelations]);
 
+  const spouseNamesByPersonId = useMemo(() => {
+    const map = new Map<string, string[]>();
+
+    graph.persons.forEach((person) => {
+      const names = new Set<string>();
+      (spouseByPerson.get(person.id) ?? []).forEach((relation) => {
+        const partnerId = relation.personAId === person.id ? relation.personBId : relation.personAId;
+        const partner = personById.get(partnerId);
+        if (partner) {
+          names.add(displayName(partner));
+        }
+      });
+      map.set(person.id, Array.from(names).sort((left, right) => left.localeCompare(right)));
+    });
+
+    return map;
+  }, [graph.persons, personById, spouseByPerson]);
+
   const childIds = useMemo(() => {
     const set = new Set<string>();
     graph.parentChildRelations.forEach((relation) => set.add(relation.childId));
     return set;
   }, [graph.parentChildRelations]);
+
+  const focusedPerson = useMemo(
+    () => (focusedTreePersonId ? personById.get(focusedTreePersonId) ?? null : null),
+    [focusedTreePersonId, personById],
+  );
+
+  const focusedSpouses = useMemo(() => {
+    if (!focusedPerson) {
+      return [];
+    }
+
+    return (spouseIdsByPerson.get(focusedPerson.id) ?? [])
+      .map((spouseId) => personById.get(spouseId))
+      .filter((value): value is Person => Boolean(value))
+      .sort((left, right) => displayName(left).localeCompare(displayName(right)));
+  }, [focusedPerson, spouseIdsByPerson, personById]);
+
+  const focusedChildren = useMemo(() => {
+    if (!focusedPerson) {
+      return [];
+    }
+
+    return Array.from(new Set(childrenByParent.get(focusedPerson.id) ?? []))
+      .map((childId) => personById.get(childId))
+      .filter((value): value is Person => Boolean(value))
+      .sort((left, right) => displayName(left).localeCompare(displayName(right)));
+  }, [focusedPerson, childrenByParent, personById]);
 
   const rootNodes = useMemo(() => {
     const roots = graph.persons.filter((person) => !childIds.has(person.id));
@@ -2301,38 +2439,39 @@ const TreePanel = ({
       }))
       .sort((left, right) => left.familyName.localeCompare(right.familyName));
   }, [rootNodes, familyNameByPersonId, personById]);
+
+  const activeTreeFamilyName = useMemo(() => {
+    if (rootNodesByFamily.length === 0) {
+      return null;
+    }
+    if (selectedFamilyName && rootNodesByFamily.some((familyGroup) => familyGroup.familyName === selectedFamilyName)) {
+      return selectedFamilyName;
+    }
+    return rootNodesByFamily[0]?.familyName ?? null;
+  }, [rootNodesByFamily, selectedFamilyName]);
+
+  const treeFamilyNames = useMemo(
+    () => rootNodesByFamily.map((familyGroup) => familyGroup.familyName),
+    [rootNodesByFamily],
+  );
+
   const visibleRootNodesByFamily = useMemo(
-    () =>
-      selectedFamilyName
-        ? rootNodesByFamily.filter((familyGroup) => familyGroup.familyName === selectedFamilyName)
-        : rootNodesByFamily,
-    [rootNodesByFamily, selectedFamilyName],
+    () => (activeTreeFamilyName ? rootNodesByFamily.filter((familyGroup) => familyGroup.familyName === activeTreeFamilyName) : []),
+    [rootNodesByFamily, activeTreeFamilyName],
   );
 
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(new Set());
   const [collapsedFamilySections, setCollapsedFamilySections] = useState<Set<string>>(new Set());
-  const [focusedRootNodeKeyByFamily, setFocusedRootNodeKeyByFamily] = useState<Record<string, string>>({});
   const parentIdsWithChildren = useMemo(
     () => new Set(graph.parentChildRelations.map((relation) => relation.parentId)),
     [graph.parentChildRelations],
   );
-  const collapsibleBranchCount = parentIdsWithChildren.size;
-  const collapsedBranchCount = useMemo(
-    () => Array.from(parentIdsWithChildren).filter((parentId) => collapsedNodeIds.has(parentId)).length,
-    [parentIdsWithChildren, collapsedNodeIds],
-  );
-  const isFullyCollapsed = collapsibleBranchCount > 0 && collapsedBranchCount === collapsibleBranchCount;
-  const familySectionCount = visibleRootNodesByFamily.length;
-  const collapsedFamilyCount = useMemo(
-    () =>
-      visibleRootNodesByFamily.reduce(
-        (count, familyGroup) => (collapsedFamilySections.has(familyGroup.familyName) ? count + 1 : count),
-        0,
-      ),
-    [collapsedFamilySections, visibleRootNodesByFamily],
-  );
+  const isFullyCollapsed =
+    parentIdsWithChildren.size > 0 &&
+    Array.from(parentIdsWithChildren).every((parentId) => collapsedNodeIds.has(parentId));
   const areAllFamilySectionsCollapsed =
-    familySectionCount > 0 && collapsedFamilyCount === familySectionCount;
+    visibleRootNodesByFamily.length > 0 &&
+    visibleRootNodesByFamily.every((familyGroup) => collapsedFamilySections.has(familyGroup.familyName));
 
   const toggleNode = (personId: string, partnerId?: string) => {
     setCollapsedNodeIds((previous) => {
@@ -2381,73 +2520,22 @@ const TreePanel = ({
       });
       return next;
     });
-
-    setFocusedRootNodeKeyByFamily((previous) => {
-      const next: Record<string, string> = {};
-      Object.entries(previous).forEach(([familyName, nodeKeyValue]) => {
-        if (familyNames.has(familyName)) {
-          next[familyName] = nodeKeyValue;
-        }
-      });
-      return next;
-    });
   }, [rootNodesByFamily]);
-
-  useEffect(() => {
-    if (viewMode === "TILE") {
-      return;
-    }
-
-    setFocusedRootNodeKeyByFamily({});
-  }, [viewMode]);
 
   const shouldCollapseAll = !isFullyCollapsed || !areAllFamilySectionsCollapsed;
   const handleToggleAllBranches = () => {
     if (shouldCollapseAll) {
       collapseAll();
       setCollapsedFamilySections(new Set(visibleRootNodesByFamily.map((familyGroup) => familyGroup.familyName)));
-      setFocusedRootNodeKeyByFamily({});
       return;
     }
 
     expandAll();
     setCollapsedFamilySections(new Set());
-    setFocusedRootNodeKeyByFamily({});
-  };
-
-  const focusRootNodeForFamily = (familyName: string, node: TreeRenderNode) => {
-    const nextNodeKey = treeNodeKey(node);
-    setFocusedRootNodeKeyByFamily((previous) => ({
-      ...previous,
-      [familyName]: nextNodeKey,
-    }));
-
-    setCollapsedNodeIds((previous) => {
-      const next = new Set(previous);
-      next.delete(node.personId);
-      if (node.partnerId) {
-        next.delete(node.partnerId);
-      }
-      return next;
-    });
-  };
-
-  const clearFocusedRootForFamily = (familyName: string) => {
-    setFocusedRootNodeKeyByFamily((previous) => {
-      const next = { ...previous };
-      delete next[familyName];
-      return next;
-    });
   };
 
   const familySections = visibleRootNodesByFamily.map((familyGroup) => {
     const isFamilyCollapsed = collapsedFamilySections.has(familyGroup.familyName);
-    const focusedNodeKey = focusedRootNodeKeyByFamily[familyGroup.familyName];
-    const visibleRootNodes =
-      viewMode === "TILE" && focusedNodeKey
-        ? familyGroup.nodes.filter((node) => treeNodeKey(node) === focusedNodeKey)
-        : familyGroup.nodes;
-    const showRootFocusHint = viewMode === "TILE" && !focusedNodeKey && familyGroup.nodes.length > 1;
 
     return (
       <View
@@ -2477,24 +2565,8 @@ const TreePanel = ({
           </View>
         </Pressable>
 
-        {!isFamilyCollapsed && showRootFocusHint ? (
-          <Text style={[styles.familyTreeHintText, { color: primaryColor }]}>
-            Select a root card to focus this family branch.
-          </Text>
-        ) : null}
-
-        {!isFamilyCollapsed && viewMode === "TILE" && focusedNodeKey ? (
-          <Pressable
-            style={[styles.familyTreeFocusButton, { borderColor: primaryColor, backgroundColor: "#ffffff" }, uiCommonStyles.shadowSoft]}
-            onPress={() => clearFocusedRootForFamily(familyGroup.familyName)}
-          >
-            <Ionicons name="arrow-undo-outline" size={14} color={primaryColor} />
-            <Text style={[styles.familyTreeFocusButtonText, { color: primaryColor }]}>Show All Root Cards</Text>
-          </Pressable>
-        ) : null}
-
         {!isFamilyCollapsed
-          ? visibleRootNodes.map((rootNode) => (
+          ? familyGroup.nodes.map((rootNode) => (
               <TreeNode
                 key={`${familyGroup.familyName}-${treeNodeKey(rootNode)}`}
                 personId={rootNode.personId}
@@ -2512,12 +2584,9 @@ const TreePanel = ({
                 secondaryColor={secondaryColor}
                 showMemberPhotos={showMemberPhotos}
                 onToggle={toggleNode}
+                onFocusPerson={onFocusPerson}
                 cardWidth={memberCardWidth}
                 cardHeight={memberCardHeight}
-                onRootFocusSelect={(personId, partnerId) =>
-                  focusRootNodeForFamily(familyGroup.familyName, { personId, partnerId })
-                }
-                isRootFocusSelectable={viewMode === "TILE" && !focusedNodeKey && familyGroup.nodes.length > 1}
               />
             ))
           : null}
@@ -2529,54 +2598,62 @@ const TreePanel = ({
     <View style={[uiCommonStyles.panel, styles.treePanelCanvas, uiCommonStyles.shadowSoft]}>
       <PanelHeader
         title="Family Tree"
-        hint={`Tap a branch card to expand/collapse descendants. Depth is limited to ${MAX_GENERATION_DEPTH} generations.`}
+        hint={
+          focusedPerson
+            ? "Focused view: horizontal links show spouse(s), vertical links show direct children."
+            : `Tap a member card to focus relationships. Use +/- to expand/collapse descendants. Depth is limited to ${MAX_GENERATION_DEPTH} generations.`
+        }
         actions={
-          <>
+          <View style={styles.treePanelHeaderActions}>
             <SectionViewModeToggle primaryColor={primaryColor} viewMode={viewMode} onToggle={onToggleViewMode} />
+            <Pressable
+              style={[
+                styles.treeHeaderActionButton,
+                {
+                  borderColor: primaryColor,
+                  backgroundColor: focusedPerson || shouldCollapseAll ? primaryColor : "#ffffff",
+                },
+                uiCommonStyles.shadowSoft,
+              ]}
+              onPress={focusedPerson ? onClearFocusPerson : handleToggleAllBranches}
+            >
+              <Ionicons
+                name={focusedPerson ? "close-circle-outline" : shouldCollapseAll ? "remove-circle-outline" : "add-circle-outline"}
+                size={15}
+                color={focusedPerson || shouldCollapseAll ? "#ffffff" : primaryColor}
+              />
+              <Text style={[styles.treeHeaderActionButtonText, { color: focusedPerson || shouldCollapseAll ? "#ffffff" : primaryColor }]}>
+                {focusedPerson ? "Clear Focus" : shouldCollapseAll ? "Collapse All Sections" : "Expand All Sections"}
+              </Text>
+            </Pressable>
             <SectionRefreshButton primaryColor={primaryColor} isRefreshing={isRefreshing} onRefresh={onRefresh} />
-          </>
+          </View>
         }
       />
       <FamilyFilterSelector
-        familyNames={familyNames}
-        selectedFamilyName={selectedFamilyName}
+        familyNames={treeFamilyNames}
+        selectedFamilyName={activeTreeFamilyName}
         primaryColor={primaryColor}
         onSelectFamily={onSelectFamily}
+        allowAllFamilies={false}
       />
-      <View style={styles.treePanelActions}>
-        <Pressable
-          style={[
-            styles.treeActionButton,
-            {
-              borderColor: primaryColor,
-              backgroundColor: shouldCollapseAll ? primaryColor : secondaryColor,
-            },
-            uiCommonStyles.shadowStrong,
-          ]}
-          onPress={handleToggleAllBranches}
-        >
-          <View style={styles.treeActionHeaderRow}>
-            <Ionicons
-              name={shouldCollapseAll ? "remove-circle-outline" : "add-circle-outline"}
-              size={18}
-              color={shouldCollapseAll ? "#ffffff" : primaryColor}
-            />
-            <Text style={[styles.treeActionTitle, { color: shouldCollapseAll ? "#ffffff" : primaryColor }]}>
-              {shouldCollapseAll ? "Collapse All Sections" : "Expand All Sections"}
-            </Text>
-          </View>
-          <Text style={[styles.treeActionHint, { color: shouldCollapseAll ? "#e8f8f1" : "#3f6356" }]}>
-            {shouldCollapseAll
-              ? "Collapse all family sections and descendant branches."
-              : "Expand every family section and all descendant branches."}
-          </Text>
-          <Text style={[styles.treeActionMeta, { color: shouldCollapseAll ? "#ffffff" : primaryColor }]}>
-            {collapsedFamilyCount}/{familySectionCount} sections, {collapsedBranchCount}/{collapsibleBranchCount} branches collapsed
-          </Text>
-        </Pressable>
-      </View>
-
-      {rootNodes.length === 0 ? (
+      {focusedPerson ? (
+        <FocusedRelationshipView
+          focusedPerson={focusedPerson}
+          spouses={focusedSpouses}
+          children={focusedChildren}
+          primaryColor={primaryColor}
+          secondaryColor={secondaryColor}
+          showMemberPhotos={showMemberPhotos}
+          viewMode={viewMode}
+          cardWidth={memberCardWidth}
+          cardHeight={memberCardHeight}
+          familyNameByPersonId={familyNameByPersonId}
+          spouseNamesByPersonId={spouseNamesByPersonId}
+          onSelectPerson={onFocusPerson}
+          onClearFocus={onClearFocusPerson}
+        />
+      ) : rootNodes.length === 0 ? (
         <Text style={styles.mutedText}>No members yet. Add a member in the Members tab.</Text>
       ) : familySections.length === 0 ? (
         <Text style={styles.mutedText}>No tree data found for the selected family.</Text>
@@ -2613,10 +2690,9 @@ type TreeNodeProps = {
   secondaryColor: string;
   showMemberPhotos: boolean;
   onToggle: (personId: string, partnerId?: string) => void;
+  onFocusPerson: (personId: string) => void;
   cardWidth: number;
   cardHeight: number;
-  onRootFocusSelect?: (personId: string, partnerId?: string) => void;
-  isRootFocusSelectable?: boolean;
 };
 
 const TreeNode = ({
@@ -2635,10 +2711,9 @@ const TreeNode = ({
   secondaryColor,
   showMemberPhotos,
   onToggle,
+  onFocusPerson,
   cardWidth,
   cardHeight,
-  onRootFocusSelect,
-  isRootFocusSelectable = false,
 }: TreeNodeProps) => {
   const person = personById.get(personId);
   const partner = partnerId ? personById.get(partnerId) ?? null : null;
@@ -2720,17 +2795,6 @@ const TreeNode = ({
   const canExpandChildren = hasChildren && !isDepthLimitReached;
   const isCollapsed = collapsedNodeIds.has(personId) || (partnerId ? collapsedNodeIds.has(partnerId) : false);
   const isExpanded = canExpandChildren && !isCollapsed;
-  const isRootNode = depth === 0;
-  const handleCardPress = () => {
-    if (isRootNode && isRootFocusSelectable && onRootFocusSelect) {
-      onRootFocusSelect(personId, partnerId);
-      return;
-    }
-
-    if (canExpandChildren) {
-      onToggle(personId, partnerId);
-    }
-  };
 
   return (
     <View
@@ -2740,7 +2804,7 @@ const TreeNode = ({
         depth === 0 && styles.treeRootNode,
       ]}
     >
-      <Pressable
+      <View
         style={[
           styles.treeCard,
           viewMode === "LIST" && styles.treeCardList,
@@ -2749,14 +2813,16 @@ const TreeNode = ({
           { borderColor: primaryColor, backgroundColor: secondaryColor },
           uiCommonStyles.shadowSoft,
         ]}
-        onPress={isRootFocusSelectable || canExpandChildren ? handleCardPress : undefined}
       >
         <View style={styles.treeTitleRow}>
           <Text style={[styles.treeBranchLabel, { color: primaryColor }]}>Generation {depth + 1}</Text>
           {canExpandChildren ? (
-            <Text style={[styles.treeToggle, { backgroundColor: primaryColor }]}>
-              {isCollapsed ? `+ ${childRenderNodes.length}` : `- ${childRenderNodes.length}`}
-            </Text>
+            <Pressable
+              style={[styles.treeToggle, { backgroundColor: primaryColor }]}
+              onPress={() => onToggle(personId, partnerId)}
+            >
+              <Text style={styles.treeToggleText}>{isCollapsed ? `+ ${childRenderNodes.length}` : `- ${childRenderNodes.length}`}</Text>
+            </Pressable>
           ) : null}
         </View>
 
@@ -2772,6 +2838,7 @@ const TreeNode = ({
               cardWidth={depthAdjustedCardWidth}
               cardHeight={depthAdjustedCardHeight}
               spouseNames={resolveSpouseNamesForPerson(nodeMember.id)}
+              onPressPerson={onFocusPerson}
             />
           ))}
         </View>
@@ -2781,7 +2848,7 @@ const TreeNode = ({
             Maximum depth reached ({MAX_GENERATION_DEPTH}). Expand further by switching root if needed.
           </Text>
         ) : null}
-      </Pressable>
+      </View>
 
       {isExpanded ? (
         <View style={[styles.treeChildrenBlock, { borderLeftColor: primaryColor }]}>
@@ -2805,6 +2872,7 @@ const TreeNode = ({
                 secondaryColor={secondaryColor}
                 showMemberPhotos={showMemberPhotos}
                 onToggle={onToggle}
+                onFocusPerson={onFocusPerson}
                 cardWidth={cardWidth}
                 cardHeight={cardHeight}
               />
@@ -3196,9 +3264,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 12,
   },
-  treePanelActions: {
+  treePanelHeaderActions: {
     flexDirection: "row",
-    marginBottom: 12,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexWrap: "wrap",
+    gap: 8,
   },
   treePanelCanvas: {
     backgroundColor: "#e6eeef",
@@ -3207,29 +3278,17 @@ const styles = StyleSheet.create({
   treeHorizontalScrollContent: {
     paddingRight: 8,
   },
-  treeActionButton: {
-    width: "100%",
+  treeHeaderActionButton: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
+    borderRadius: 999,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    gap: 4,
-  },
-  treeActionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
-  treeActionTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  treeActionHint: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  treeActionMeta: {
-    fontSize: 11,
+  treeHeaderActionButtonText: {
+    fontSize: 12,
     fontWeight: "700",
   },
   familyTreeGroupCard: {
@@ -3266,27 +3325,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   familyTreeGroupToggleText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  familyTreeHintText: {
-    fontSize: 11,
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  familyTreeFocusButton: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    marginBottom: 8,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#ffffff",
-  },
-  familyTreeFocusButtonText: {
     fontSize: 11,
     fontWeight: "700",
   },
@@ -3348,14 +3386,18 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   treeToggle: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#263f37",
-    backgroundColor: "#d9e8e3",
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
     minWidth: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#d9e8e3",
+  },
+  treeToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#ffffff",
     textAlign: "center",
   },
   treeDepthLimitText: {
